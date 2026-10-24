@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import Counter
 
 from evals.backends import model_for
@@ -35,6 +36,15 @@ def build_call(persona: dict, result) -> dict:
     }
 
 
+SECTION_PREFIX = re.compile(r"^[A-Z][a-z]+(?: [a-z]+)?: ")  # "Never: ", "Payment date: "
+
+
+def fix_for_rule(sop_rule: str, fallback: str) -> str:
+    """The fix for a broken SOP rule is the rule itself, so the "Fix:" line always matches the rule above it."""
+    rule = SECTION_PREFIX.sub("", sop_rule.strip(), count=1).strip()
+    return f"Add or enforce this rule in the prompt: {rule}" if rule else fallback
+
+
 def group_next_fixes(calls: list[dict]) -> list[dict]:
     """Failed calls grouped by the SOP rule they broke: biggest group first, then by rule text."""
     groups: dict[str, list[dict]] = {}
@@ -44,7 +54,7 @@ def group_next_fixes(calls: list[dict]) -> list[dict]:
     fixes = [
         {
             "sop_rule": rule,
-            "fix_hint": members[0]["fix_hint"],
+            "fix_hint": fix_for_rule(rule, members[0]["fix_hint"]),
             "count": len(members),
             "calls": [{"persona_id": c["persona_id"], "name": c["name"], "failing_turn": c["failing_turn"]}
                       for c in members],

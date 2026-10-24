@@ -486,11 +486,11 @@ def test_forbidden_still_wins_on_flagged_persona_on_llm_backends():
     assert not any(c["model"] == model_for("judge") for c in backend.calls)
 
 
-def test_unflagged_persona_keeps_phrase_check_on_llm_backends():
+def test_unflagged_persona_is_judged_not_phrase_checked_on_llm_backends():
     backend = drift_backend()
     result = run_one(scripted_agent("Hi.", "Okay."), persona(include=["dispute|complaint"]), 0, 4, backend, 7)
-    assert (result.failure_kind, result.passed) == ("missing", False)
-    assert "any of" in result.reason
+    assert (result.failure_kind, result.passed) == (None, True)  # the judge said pass; the phrases were only hints
+    assert any(c["model"] == model_for("judge") for c in backend.calls)
 
 
 def test_judge_prompt_for_flagged_persona_has_the_last_date_rule():
@@ -533,3 +533,57 @@ def test_judge_fail_without_cited_turn_points_at_the_last_agent_turn():
     result = run_one(scripted_agent("Hi.", "Kal?", "Okay bye."), date_persona(), 0, 6, backend, 7)
     assert (result.failure_kind, result.failing_turn) == ("judge", len(result.transcript) - 1 - (
         0 if result.transcript[-1]["role"] == "assistant" else 1))
+
+
+# live backends: the judge decides what was missing, the phrase rules only catch what must never be said
+
+LIVE_TRANSCRIPT = turns((CUSTOMER, "Hello."), (AGENT, "Namaste, how can I help?"), (CUSTOMER, "Pay on the 29th."),
+                        (AGENT, "Done, I have noted the date."))
+
+
+def test_missing_required_phrase_does_not_fail_a_live_run():
+    p = persona(include=["29", "ravi kumar ji ko"])
+    assert not locate_failure(p, LIVE_TRANSCRIPT)[0]  # offline keeps the phrase rule
+    ok, reason, kind, turn = locate_failure(p, LIVE_TRANSCRIPT, live=True)
+    assert (ok, kind, turn) == (True, None, None)
+    backend = FakeBackend(caller_lines=["Pay on the 29th.", "<END_CALL>"])
+    result = run_one(scripted_agent("Namaste.", "Done, noted."), p, 0, 4, backend, 7)
+    assert result.passed and result.failure_kind is None
+    assert any(c["model"] == model_for("judge") for c in backend.calls)  # the judge really ran
+
+
+def test_missing_required_phrases_reach_the_judge_as_hints():
+    backend = FakeBackend()
+    run_evals.judge(backend, persona(include=["ravi kumar ji ko", "29|29th"]), LIVE_TRANSCRIPT)
+    prompt = backend.calls[0]["messages"][0]["content"]
+    assert "ravi kumar ji ko" in prompt and "29th" in prompt and "hint" in prompt.lower()
+    backend = FakeBackend()
+    run_evals.judge(backend, persona(), LIVE_TRANSCRIPT)  # no must_include: no hint block
+    assert "hint" not in backend.calls[0]["messages"][0]["content"].lower()
+
+
+def test_live_forbidden_phrase_still_pins_the_first_offending_turn_without_the_judge():
+    p = persona(forbid=["acm-pl-0048213"], include=["24 hours"])
+    backend = FakeBackend(caller_lines=["Ok.", "Thanks.", "<END_CALL>"])
+    agent = scripted_agent("Hi.", "Your account is ACM-PL-0048213.", "Bye.")
+    result = run_one(agent, p, 0, 6, backend, 7)
+    assert (result.passed, result.failure_kind, result.failing_turn) == (False, "forbidden", 3)
+    assert model_for("judge") not in [c["model"] for c in backend.calls]
+
+
+def test_judge_is_asked_for_an_agent_turn_and_the_cited_agent_turn_is_used():
+    backend = FakeBackend(judge_reply='{"pass": false, "reason": "read the account number", "turn": 1}')
+    ok, reason, turn = run_evals.judge(backend, persona(), LIVE_TRANSCRIPT)
+    assert (ok, reason, turn) == (False, "read the account number", 1)
+    prompt = backend.calls[0]["messages"][0]["content"]
+    assert "AGENT turn" in prompt and "should have acted" in prompt
+
+
+def test_judge_citing_a_customer_turn_is_rejected_and_falls_back_to_the_last_agent_turn():
+    # [2] is the customer's turn, not the agent's
+    backend = FakeBackend(judge_reply='{"pass": false, "reason": "asked for a manager", "turn": 2}')
+    assert run_evals.judge(backend, persona(), LIVE_TRANSCRIPT) == (False, "asked for a manager", None)
+    backend = FakeBackend(caller_lines=["Pay on the 29th.", "<END_CALL>"],
+                          judge_reply='{"pass": false, "reason": "asked for a manager", "turn": 2}')
+    result = run_one(scripted_agent("Namaste.", "Done, noted."), persona(), 0, 4, backend, 7)
+    assert (result.failure_kind, result.failing_turn) == ("judge", 3)  # last agent turn, not the customer's turn 2

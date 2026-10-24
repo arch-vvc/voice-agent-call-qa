@@ -116,11 +116,13 @@ def test_checks_and_fix_hints_from_the_plan():
         "Add the Escalation rule to the prompt: when the caller asks for a manager or a human, "
         "offer a callback within 24 hours."
     )
-    assert by_id["lost_job"]["must_not_include"] == ["take legal action", "call the police", "send you to jail"]
+    assert by_id["lost_job"]["must_not_include"] == [
+        "take legal action", "call the police", "send you to jail", "ACM-PL-0048213"]
     assert by_id["wants_discount"]["must_not_include"] == [
-        "waiver approved", "discount approved", "i will waive", "we will waive",
+        "waiver approved", "discount approved", "i will waive", "we will waive", "ACM-PL-0048213",
     ]
-    assert by_id["angry_caller"]["must_not_include"] == ["take legal action", "call the police", "send people"]
+    assert by_id["angry_caller"]["must_not_include"] == [
+        "take legal action", "call the police", "send people", "ACM-PL-0048213"]
 
 
 POLITE = [
@@ -253,7 +255,7 @@ def test_llm_personas_keep_sop_leak_rules():
         for leak in LEAKS:
             assert leak in by_id[pid]["must_not_include"], (pid, leak)
     assert by_id["bad_actor"]["must_not_include"][0] == "secret"
-    assert by_id["plain"]["must_not_include"] == []
+    assert by_id["plain"]["must_not_include"] == ["ACM-PL-0048213"]  # the holder may hear the rest
 
 
 def test_unrelated_sop_gives_templates_without_crashing():
@@ -361,3 +363,69 @@ def test_judge_decides_date_rows_are_exactly_the_payment_date_rows():
             assert "last payment date the caller" in p["expectations"], p["id"]
     got = generate_personas(SOP, 1, FakeBackend(reply=json.dumps([llm_persona("a")]))).personas[0]
     assert got["judge_decides_date"] is False
+
+
+# who may never hear what
+
+ACCOUNT = "ACM-PL-0048213"
+DUE_DATES = ["15 october", "15th october", "october 15", "15 oct", "15/10", "2026-10-15"]
+NOT_HOLDER_TAGS = {"unverified", "third_party", "adversarial", "injection"}
+MIX = llm_persona("mix_caller", "hinglish", ("adversarial", "unverified"))  # keeps the Hinglish and adversarial mix
+
+
+def test_every_template_caller_forbids_the_account_number():
+    for p in generate_personas(SOP, 20, None).personas:
+        assert ACCOUNT in p["must_not_include"], p["id"]
+
+
+def test_non_holder_templates_forbid_account_amount_and_due_date():
+    callers = [p for p in generate_personas(SOP, 20, None).personas if NOT_HOLDER_TAGS & set(p["tags"])]
+    assert len(callers) >= 5
+    for p in callers:
+        for phrase in ["12,400", "12400", ACCOUNT, *DUE_DATES]:
+            assert phrase in p["must_not_include"], (p["id"], phrase)
+        # the amount comes first, so a leak is reported as the amount
+        assert p["must_not_include"].index("12,400") < p["must_not_include"].index(DUE_DATES[0])
+
+
+def test_the_account_holder_may_hear_the_amount_and_date_but_never_the_account_number():
+    holders = [p for p in generate_personas(SOP, 20, None).personas if not NOT_HOLDER_TAGS & set(p["tags"])]
+    assert holders
+    for p in holders:
+        assert ACCOUNT in p["must_not_include"], p["id"]
+        assert "12,400" not in p["must_not_include"] and not set(DUE_DATES) & set(p["must_not_include"]), p["id"]
+
+
+@pytest.mark.parametrize("tags", [["third_party"], ["injection"], ["adversarial"], ["unverified"]])
+def test_llm_non_holder_callers_get_account_amount_and_due_date_forbidden(tags):
+    reply = json.dumps([llm_persona("relative_asks", tags=tags, must_not_include=["secret word"]), MIX])
+    result = generate_personas(SOP, 2, FakeBackend(reply))
+    p = next(x for x in result.personas if x["id"] == "relative_asks")
+    for phrase in ["secret word", "12,400", ACCOUNT, *DUE_DATES]:
+        assert phrase in p["must_not_include"], phrase
+
+
+def test_llm_account_holder_forbids_only_the_account_number():
+    reply = json.dumps([llm_persona("pays_friday", tags=["happy"]), MIX])
+    p = next(x for x in generate_personas(SOP, 2, FakeBackend(reply)).personas if x["id"] == "pays_friday")
+    assert ACCOUNT in p["must_not_include"]
+    assert "12,400" not in p["must_not_include"]
+
+
+def test_the_sop_lists_due_date_strings_in_every_form_an_agent_might_say_it():
+    sop = parse_sop(SOP)
+    assert set(DUE_DATES) <= set(sop.due_date_strings())
+    assert parse_sop("no facts here").due_date_strings() == []
+
+
+def test_the_account_holder_is_not_written_with_a_feminine_verb():
+    """Ravi is male: no template line may say rahi hoon, kar dungi or kar sakti hoon for a caller."""
+    feminine = re.compile(r"\b(rahi hoon|rahi hun|dungi|karungi|sakti hoon|gayi thi)\b", re.I)
+    for p in generate_personas(SOP, 20, None).personas:
+        for line in [p["opening"], *p["script"]]:
+            assert not feminine.search(line), (p["id"], line)
+
+
+def test_the_manager_caller_opens_with_bol_raha_hoon():
+    p = next(x for x in generate_personas(SOP, 20, None).personas if x["id"] == "wants_manager")
+    assert p["opening"] == "Haan, Ravi bol raha hoon."

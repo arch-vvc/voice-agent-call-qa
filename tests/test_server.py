@@ -246,7 +246,7 @@ def test_next_fixes_grouped_by_sop_rule_largest_first(start):
     fixes = run_to_end(base, "v1")["report"]["next_fixes"]
     assert [(f["count"], f["sop_rule"].split(":")[0]) for f in fixes] == [(5, "Verification"), (1, "Escalation")]
     assert len(fixes[0]["calls"]) == 5 and {c["failing_turn"] for c in fixes[0]["calls"]} == {1}
-    assert fixes[0]["fix_hint"].startswith("Confirm you are speaking with")
+    assert "Confirm you are speaking with" in fixes[0]["fix_hint"]
 
 
 def test_all_pass_has_no_next_fixes():

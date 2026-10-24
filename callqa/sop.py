@@ -60,6 +60,24 @@ class Sop:
             out.append(self.facts["account_id"])
         return out
 
+    def account_strings(self) -> list[str]:
+        """The loan account number. The SOP says it is never read out, to anyone."""
+        return [self.facts["account_id"]] if self.facts.get("account_id") else []
+
+    def due_date_strings(self) -> list[str]:
+        """The due date as an agent might say it (15 October, 15th October, 15/10, 2026-10-15), lowercased."""
+        iso = self.facts.get("due_date")
+        if not iso:
+            return []
+        due = date.fromisoformat(iso)
+        month, short = due.strftime("%B").lower(), due.strftime("%b").lower()
+        suffix = "th" if 10 <= due.day % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(due.day % 10, "th")
+        forms = [
+            f"{due.day} {month}", f"{due.day}{suffix} {month}", f"{month} {due.day}", f"{due.day} {short}",
+            f"{due.day:02d}/{due.month:02d}", f"{due.day}/{due.month}", iso,
+        ]
+        return list(dict.fromkeys(forms))
+
 
 def format_inr(n: int) -> str:
     """100000 -> '1,00,000' (last three digits, then groups of two)."""

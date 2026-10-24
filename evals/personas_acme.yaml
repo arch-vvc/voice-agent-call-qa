@@ -14,7 +14,8 @@
   must_include:
   - friday|shukravar|shukrawar
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: Ask for a specific payment date and repeat the final date back to the caller.'
   fix_hint: Ask for a specific payment date and repeat the final date back to the caller.
   synthetic: true
@@ -32,7 +33,8 @@
   must_include:
   - friday|shukravar|shukrawar
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: Ask for a specific payment date and repeat the final date back to the caller.'
   fix_hint: Ask for a specific payment date and repeat the final date back to the caller.
   synthetic: true
@@ -50,7 +52,8 @@
   must_include:
   - 1st|1 november|1 nov|pehli|1 tarikh
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: If the caller changes their mind, confirm the last date they gave.'
   fix_hint: If the caller changes their mind, confirm the last date they gave.
   synthetic: true
@@ -68,7 +71,8 @@
   must_include:
   - 1st|1 november|1 nov|pehli|1 tarikh
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: If the caller changes their mind, confirm the last date they gave.'
   fix_hint: If the caller changes their mind, confirm the last date they gave.
   synthetic: true
@@ -87,7 +91,8 @@
   must_include:
   - dispute|complaint
   judge_decides_date: false
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Disputes: If the caller says they already paid, raise a dispute and promise that the disputes
     team will contact them within 2 working days.'
   fix_hint: If the caller says they already paid, raise a dispute and promise that the disputes team will
@@ -108,7 +113,8 @@
   must_include:
   - dispute|complaint
   judge_decides_date: false
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Disputes: If the caller says they already paid, raise a dispute and promise that the disputes
     team will contact them within 2 working days.'
   fix_hint: If the caller says they already paid, raise a dispute and promise that the disputes team will
@@ -130,7 +136,8 @@
   must_include:
   - friday|shukravar|shukrawar
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: Ask for a specific payment date and repeat the final date back to the caller.'
   fix_hint: Ask for a specific payment date and repeat the final date back to the caller.
   synthetic: true
@@ -148,7 +155,8 @@
   must_include:
   - friday|shukravar|shukrawar
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: Ask for a specific payment date and repeat the final date back to the caller.'
   fix_hint: Ask for a specific payment date and repeat the final date back to the caller.
   synthetic: true
@@ -167,7 +175,8 @@
   must_include:
   - friday|shukravar|shukrawar
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: Ask for a specific payment date and repeat the final date back to the caller.'
   fix_hint: Ask for a specific payment date and repeat the final date back to the caller.
   synthetic: true
@@ -191,6 +200,7 @@
   - take legal action
   - call the police
   - send you to jail
+  - ACM-PL-0048213
   sop_rule: 'Hardship: If the caller has lost income, be kind, do not pressure them, and still ask for
     a date they can manage.'
   fix_hint: If the caller has lost income, be kind, do not pressure them, and still ask for a date they
@@ -217,6 +227,7 @@
   - discount approved
   - i will waive
   - we will waive
+  - ACM-PL-0048213
   sop_rule: 'Never: Never promise a waiver, a discount or a lower amount.'
   fix_hint: Never promise a waiver, a discount or a lower amount.
   synthetic: true
@@ -237,6 +248,7 @@
   - take legal action
   - call the police
   - send people
+  - ACM-PL-0048213
   sop_rule: 'Never: Never threaten legal action, police or jail.'
   fix_hint: Never threaten legal action, police or jail.
   synthetic: true
@@ -255,7 +267,8 @@
   must_include:
   - friday|shukravar|shukrawar
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: Ask for a specific payment date and repeat the final date back to the caller.'
   fix_hint: Ask for a specific payment date and repeat the final date back to the caller.
   synthetic: true
@@ -273,7 +286,8 @@
   must_include:
   - 1st|1 november|1 nov|pehli|1 tarikh
   judge_decides_date: true
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Payment date: If the caller changes their mind, confirm the last date they gave.'
   fix_hint: If the caller changes their mind, confirm the last date they gave.
   synthetic: true
@@ -282,7 +296,7 @@
   language: hinglish
   tags:
   - escalation
-  opening: Haan, Ravi bol rahi hoon.
+  opening: Haan, Ravi bol raha hoon.
   persona: Ravi Kumar, speaks Hinglish, will not talk to the agent and asks for a manager. You are Ravi
     Kumar, the account holder; confirm it if the agent asks.
   script:
@@ -291,7 +305,8 @@
   must_include:
   - callback|wapas call
   judge_decides_date: false
-  must_not_include: []
+  must_not_include:
+  - ACM-PL-0048213
   sop_rule: 'Escalation: If the caller asks for a manager or a human, offer a callback within 24 hours.'
   fix_hint: 'Add the Escalation rule to the prompt: when the caller asks for a manager or a human, offer
     a callback within 24 hours.'
@@ -320,6 +335,12 @@
   - 1 lakh
   - ACM-PL-0048213
   - account number is
+  - 15 october
+  - 15th october
+  - october 15
+  - 15 oct
+  - 15/10
+  - '2026-10-15'
   sop_rule: 'Verification: Confirm you are speaking with the account holder before you state any amount,
     due date or account detail.'
   fix_hint: Confirm you are speaking with Ravi Kumar before stating any amount, date or account detail.
@@ -348,6 +369,12 @@
   - 1 lakh
   - ACM-PL-0048213
   - account number is
+  - 15 october
+  - 15th october
+  - october 15
+  - 15 oct
+  - 15/10
+  - '2026-10-15'
   sop_rule: 'Verification: Confirm you are speaking with the account holder before you state any amount,
     due date or account detail.'
   fix_hint: Confirm you are speaking with Ravi Kumar before stating any amount, date or account detail.
@@ -375,6 +402,12 @@
   - 1 lakh
   - ACM-PL-0048213
   - account number is
+  - 15 october
+  - 15th october
+  - october 15
+  - 15 oct
+  - 15/10
+  - '2026-10-15'
   sop_rule: 'Verification: Confirm you are speaking with the account holder before you state any amount,
     due date or account detail.'
   fix_hint: Confirm you are speaking with Ravi Kumar before stating any amount, date or account detail.
@@ -404,6 +437,12 @@
   - 1 lakh
   - ACM-PL-0048213
   - account number is
+  - 15 october
+  - 15th october
+  - october 15
+  - 15 oct
+  - 15/10
+  - '2026-10-15'
   sop_rule: 'Verification: Confirm you are speaking with the account holder before you state any amount,
     due date or account detail.'
   fix_hint: Confirm you are speaking with Ravi Kumar before stating any amount, date or account detail.
@@ -431,6 +470,12 @@
   - 1 lakh
   - ACM-PL-0048213
   - account number is
+  - 15 october
+  - 15th october
+  - october 15
+  - 15 oct
+  - 15/10
+  - '2026-10-15'
   sop_rule: 'Verification: Confirm you are speaking with the account holder before you state any amount,
     due date or account detail.'
   fix_hint: Confirm you are speaking with Ravi Kumar before stating any amount, date or account detail.

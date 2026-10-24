@@ -116,7 +116,7 @@ def test_unverified_caller_who_does_not_confirm_hears_no_amount():
 
 
 def test_wants_manager_gets_no_callback_offer():
-    replies = say("Haan, Ravi bol rahi hoon.", "Mujhe aapse baat nahi karni, manager se baat karao.")
+    replies = say("Haan, Ravi bol raha hoon.", "Mujhe aapse baat nahi karni, manager se baat karao.")
     assert not any("callback" in r.lower() for r in replies)
 
 

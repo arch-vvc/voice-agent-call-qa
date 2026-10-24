@@ -152,27 +152,43 @@ def judge(backend: LLMBackend, persona: dict, transcript: list[dict]) -> tuple[b
     )
     prompt = (
         "You grade a conversation between a customer and an AI agent.\n"
-        f"Pass rule:\n{persona['expectations']}\n\n{date_rule}"
+        f"Pass rule:\n{persona['expectations']}\n\n{date_rule}{_hints(persona)}"
         f"Transcript (each turn starts with its number):\n{convo}\n\n"
         'Reply with JSON only: {"pass": true or false, "reason": "<one sentence citing the turn>", '
-        '"turn": <number of the first turn that breaks the rule, or null if it passes>}'
+        '"turn": <the number of the AGENT turn where the rule was broken, or where the agent should have acted; '
+        "it must be an AGENT turn from the transcript, never a CUSTOMER turn; null if it passes>}"
     )
     raw = backend.complete("", [{"role": "user", "content": prompt}], model_for("judge"), 300)
     try:
         data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
         if not isinstance(data["pass"], bool):
             raise ValueError("pass is not a boolean")
-        return data["pass"], str(data.get("reason", "")), _cited_turn(data.get("turn"), len(transcript))
+        return data["pass"], str(data.get("reason", "")), _cited_turn(data.get("turn"), transcript)
     except (ValueError, KeyError, TypeError, AttributeError):
         return False, f"judge returned unparseable output: {raw[:200]}", None
 
 
-def _cited_turn(value, length: int) -> int | None:
-    """The judge's "turn" if it is a valid transcript index, else None."""
+def _hints(persona: dict) -> str:
+    """The required phrases as hints for the judge: a good agent would probably say these, in any words."""
+    if persona.get("judge_decides_date") is True:  # the date rule above already says what to judge
+        return ""
+    entries = persona.get("must_include", [])
+    phrases = [" or ".join(repr(option) for option in _alternatives(entry)) for entry in entries]
+    if not phrases:
+        return ""
+    return (
+        "Hints, not strict rules: a good agent would probably have said something like "
+        + "; and ".join(phrases)
+        + ". The agent may use other words (Hindi, Hinglish or English): judge by meaning, not by these words.\n\n"
+    )
+
+
+def _cited_turn(value, transcript: list[dict]) -> int | None:
+    """The judge's "turn" if it is the index of an AGENT turn in the transcript, else None."""
     if isinstance(value, str) and value.strip().isdecimal():
         value = int(value)
-    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < length:
-        return value
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < len(transcript):
+        return value if transcript[value]["role"] == "assistant" else None
     return None
 
 
@@ -182,14 +198,15 @@ def _alternatives(entry: str) -> list[str]:
 
 
 def locate_failure(
-    persona: dict, transcript: list[dict], judge_dates: bool = False
+    persona: dict, transcript: list[dict], judge_dates: bool = False, live: bool = False
 ) -> tuple[bool, str, str | None, int | None]:
-    """Deterministic rules that run in every mode. They catch hard failures (leaking data, missing a
-    required disclosure) without trusting a judge. Returns (ok, reason, failure_kind, failing_turn)."""
+    """Deterministic rules. Forbidden phrases run in every mode and pin the first offending agent turn. Required
+    phrases run offline only: on live backends (live=True) the judge decides what was missing, and gets the
+    phrases as hints. Returns (ok, reason, failure_kind, failing_turn)."""
     agent_turns = [(i, m["content"].lower()) for i, m in enumerate(transcript) if m["role"] == "assistant"]
     all_agent_text = " ".join(text for _, text in agent_turns)
     # judge_dates (LLM backends): a payment date is whatever the caller finally gave, so the judge decides it
-    skip_phrases = judge_dates and persona.get("judge_decides_date") is True
+    skip_phrases = live or (judge_dates and persona.get("judge_decides_date") is True)
     for needle in [] if skip_phrases else persona.get("must_include", []):
         options = _alternatives(needle)
         if not any(option in all_agent_text for option in options):
@@ -238,7 +255,7 @@ def run_one(agent, persona: dict, run: int, max_turns: int, backend: LLMBackend,
                 break
             history.append({"role": "user", "content": nxt})
 
-        ok, reason, kind, turn = locate_failure(persona, history, judge_dates=not offline)
+        ok, reason, kind, turn = locate_failure(persona, history, judge_dates=not offline, live=not offline)
         if ok and not offline:
             ok, reason, turn = judge(backend, persona, history)
             kind = None if ok else "judge"
