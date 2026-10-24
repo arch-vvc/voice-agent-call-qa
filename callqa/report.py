@@ -1,6 +1,7 @@
 """Builds the dashboard report (see "API" in plans/call-qa-dashboard.md) from personas and run results."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import re
 from collections import Counter
@@ -19,6 +20,21 @@ def backend_models(backend) -> dict:
     return {role: model_for(role) for role in ("caller", "agent", "judge", "gen")}
 
 
+def broken_rule(persona: dict, result) -> str:
+    """The SOP rule this call broke. A forbidden phrase is reported under the rule that forbids it (an account number
+    leak under "never read it out"), so "Next fix" points at the real fix; anything else under the rule under test."""
+    match = re.search(r"forbidden phrase: (.+)$", result.reason) if result.failure_kind == "forbidden" else None
+    if match:
+        try:
+            phrase = ast.literal_eval(match[1])
+        except (ValueError, SyntaxError):
+            phrase = match[1].strip("'\"")
+        rule = (persona.get("forbid_rules") or {}).get(phrase)
+        if rule:
+            return rule
+    return persona["sop_rule"]
+
+
 def build_call(persona: dict, result) -> dict:
     judged = result.failure_kind == "judge" and bool(result.reason.strip())
     return {
@@ -30,7 +46,7 @@ def build_call(persona: dict, result) -> dict:
         "reason": result.reason,
         "failure_kind": result.failure_kind,
         "failing_turn": None if result.passed or result.failure_kind == "crash" else result.failing_turn,
-        "sop_rule": persona["sop_rule"],
+        "sop_rule": broken_rule(persona, result),
         "fix_hint": result.reason if judged else persona["fix_hint"],
         "notes": result.notes,
         "flaky": result.flaky,

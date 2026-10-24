@@ -130,7 +130,7 @@ def test_main_check_aborted_message(monkeypatch, capsys):
 
 def test_docs_describe_the_command():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for needle in ("python -m callqa", "70%", "95%", "about 50", "no API key"):
+    for needle in ("python -m callqa", "70%", "95%", "about 55", "no API key"):
         assert needle in readme
     claude_md = REPO_CLAUDE_MD.read_text(encoding="utf-8") if REPO_CLAUDE_MD else ""
     if REPO_CLAUDE_MD:
@@ -215,6 +215,6 @@ def test_open_browser_uses_127_0_0_1(monkeypatch):
 def test_docs_say_free_check_is_offline():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "python -m callqa --check --backend offline" in readme
-    assert "about 100" in readme
+    assert "about 110" in readme
     if REPO_CLAUDE_MD:
         assert "localhost" not in REPO_CLAUDE_MD.read_text(encoding="utf-8")
