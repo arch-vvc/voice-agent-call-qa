@@ -1,0 +1,85 @@
+"""Builds the dashboard report (see "API" in plans/call-qa-dashboard.md) from personas and run results."""
+from __future__ import annotations
+
+import hashlib
+from collections import Counter
+
+from evals.backends import model_for
+
+
+def sop_hash(sop_text: str) -> str:
+    return hashlib.sha256(sop_text.encode("utf-8")).hexdigest()[:12]
+
+
+def backend_models(backend) -> dict:
+    """Model ids per role. Offline makes no model calls, so it has none."""
+    if backend.name == "offline":
+        return {}
+    return {role: model_for(role) for role in ("caller", "agent", "judge", "gen")}
+
+
+def build_call(persona: dict, result) -> dict:
+    judged = result.failure_kind == "judge" and bool(result.reason.strip())
+    return {
+        "persona_id": persona["id"],
+        "name": persona["name"],
+        "language": persona["language"],
+        "tags": list(persona["tags"]),
+        "passed": result.passed,
+        "reason": result.reason,
+        "failure_kind": result.failure_kind,
+        "failing_turn": None if result.passed or result.failure_kind == "crash" else result.failing_turn,
+        "sop_rule": persona["sop_rule"],
+        "fix_hint": result.reason if judged else persona["fix_hint"],
+        "transcript": [{"role": m["role"], "content": m["content"]} for m in result.transcript],
+    }
+
+
+def group_next_fixes(calls: list[dict]) -> list[dict]:
+    """Failed calls grouped by the SOP rule they broke: biggest group first, then by rule text."""
+    groups: dict[str, list[dict]] = {}
+    for call in calls:
+        if not call["passed"]:
+            groups.setdefault(call["sop_rule"], []).append(call)
+    fixes = [
+        {
+            "sop_rule": rule,
+            "fix_hint": members[0]["fix_hint"],
+            "count": len(members),
+            "calls": [{"persona_id": c["persona_id"], "name": c["name"], "failing_turn": c["failing_turn"]}
+                      for c in members],
+        }
+        for rule, members in groups.items()
+    ]
+    return sorted(fixes, key=lambda fix: (-fix["count"], fix["sop_rule"]))
+
+
+def crash_warnings(calls: list[dict]) -> list[str]:
+    """One line per distinct crash cause, in the order first seen."""
+    causes = Counter(c["reason"] for c in calls if c["failure_kind"] == "crash")
+    return [f"{n} call{'s' if n > 1 else ''} crashed: {reason}" for reason, n in causes.items()]
+
+
+def build_report(*, run_id: str, sop_text: str, agent: dict, backend, callers: int, max_turns: int,
+                 generation, results: list, seconds: float) -> dict:
+    by_persona = {r.persona: r for r in results}
+    calls = [build_call(p, by_persona[p["id"]]) for p in generation.personas if p["id"] in by_persona]
+    passed = sum(c["passed"] for c in calls)
+    total = len(calls)
+    warnings = [*backend.warnings, *generation.warnings, *crash_warnings(calls)]
+    return {
+        "run_id": run_id,
+        "sop_hash": sop_hash(sop_text),
+        "agent": {"id": agent["id"], "label": agent["label"]},
+        "backend": {"name": backend.name, "models": backend_models(backend)},
+        "callers": callers,
+        "max_turns": max_turns,
+        "warnings": warnings,
+        "generator": {"source": generation.source, "warnings": list(generation.warnings)},
+        "pass_rate": round(passed / total, 4) if total else 0.0,
+        "passed": passed,
+        "total": total,
+        "seconds": round(seconds, 2),
+        "calls": calls,
+        "next_fixes": group_next_fixes(calls),
+    }

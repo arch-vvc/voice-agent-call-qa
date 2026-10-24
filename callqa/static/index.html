@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Call QA: does the agent follow the client's script?</title>
+<style>
+  :root {
+    --ink: #1b2330; --muted: #5d6878; --line: #dde2ea; --bg: #f4f6f9; --card: #ffffff;
+    --pass: #17803d; --pass-bg: #e6f4ea; --fail: #c62828; --fail-bg: #fdecea; --warn-bg: #fff4d6;
+    --warn-ink: #7a5300; --mid: #9a6200; --mid-bg: #fff4d6; --accent: #2457d6; --mark: #ffe066;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.45;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    padding: 14px 32px; background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0 0 2px; font-size: 20px; letter-spacing: -.01em; }
+  header .tagline { color: var(--muted); font-size: 13px; }
+  #mode-badge {
+    padding: 6px 14px; border-radius: 999px; background: #eaf0fd; color: var(--accent);
+    font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  #warnings, #error-banner { margin: 0; padding: 10px 32px; font-size: 14px; }
+  #warnings { background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid #f0dfa8; }
+  #warnings p { margin: 2px 0; }
+  #error-banner { background: var(--fail-bg); color: var(--fail); font-weight: 600; border-bottom: 1px solid #f3bcb7; }
+  [hidden] { display: none !important; }
+
+  main { display: grid; grid-template-columns: 400px 1fr; gap: 24px; max-width: 1440px; margin: 0 auto; padding: 24px 32px; }
+  aside { position: sticky; top: 16px; align-self: start; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  #sop-input {
+    width: 100%; height: 340px; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 6px;
+    font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink);
+  }
+  #agent-select { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 15px; margin-bottom: 12px; }
+  #run-button {
+    width: 100%; padding: 12px; border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+    font-size: 16px; font-weight: 700; cursor: pointer;
+  }
+  #run-button:disabled { background: #9db2e6; cursor: wait; }
+  #progress { margin-top: 10px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #loading { margin-top: 10px; font-size: 14px; color: var(--accent); font-weight: 600; }
+  #loading::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px; border: 2px solid #c8d5f5; border-top-color: var(--accent); border-radius: 50%; vertical-align: -1px; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .headline { display: flex; align-items: center; gap: 28px; }
+  #headline-panel { padding: 22px 28px; }
+  #pass-rate { font-size: 96px; line-height: .9; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; color: #c3cad6; }
+  #pass-rate.good { color: var(--pass); }
+  #pass-rate.mid { color: var(--mid); }
+  #pass-rate.bad { color: var(--fail); }
+  .headline { min-height: 86px; }
+  .headline-text { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+  .headline-sub { font-size: 14px; letter-spacing: 0; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  #before-after { margin-left: auto; padding: 12px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 26px; font-weight: 800; letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+  #before-after .hint { display: block; margin-top: 2px; font-size: 12px; letter-spacing: .02em; color: var(--muted); font-weight: 400; }
+  .empty { color: var(--muted); font-size: 16px; }
+  .steps { margin: 0; padding: 20px 24px; list-style: none; counter-reset: step; background: var(--card); border: 1px dashed #c3cad6; border-radius: 10px; }
+  .steps li { counter-increment: step; display: flex; gap: 14px; align-items: baseline; padding: 8px 0; font-size: 16px; color: var(--ink); }
+  .steps li::before { content: counter(step); flex: 0 0 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 13px; font-weight: 700; }
+  .steps li span { color: var(--muted); }
+
+  #next-fix { border-left: 6px solid var(--fail); }
+  #next-fix.mid { border-left-color: var(--mid); }
+  #next-fix.panel.clean { border-left-color: var(--pass); }
+  .fix { padding: 12px 0; border-top: 1px solid var(--line); }
+  .fix:first-of-type { border-top: 0; padding-top: 0; }
+  .fix:last-child { padding-bottom: 0; }
+  .fix-title { font-size: 17px; font-weight: 700; line-height: 1.35; }
+  .fix-count {
+    display: inline-block; min-width: 28px; margin-right: 2px; padding: 1px 8px; border-radius: 999px;
+    background: var(--fail); color: #fff; text-align: center; font-size: 14px;
+  }
+  .fix-hint { margin: 4px 0 8px; color: var(--muted); }
+  .fixcalls { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fixcall {
+    border: 1px solid #f3bcb7; background: var(--fail-bg); color: var(--fail); border-radius: 6px;
+    padding: 4px 10px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .fixcall:hover { background: #fadad7; }
+
+  #calls { display: block; }
+  .call { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; border-left: 6px solid var(--pass); }
+  .call.failed { border-left-color: var(--fail); }
+  .call > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .call > summary::-webkit-details-marker { display: none; }
+  .verdict { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: var(--pass-bg); color: var(--pass); }
+  .call.failed .verdict { background: var(--fail-bg); color: var(--fail); }
+  .call-name { font-weight: 700; }
+  .chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #eef1f6; color: var(--muted); }
+  .chip.lang { background: #efe9fb; color: #5b34a8; }
+  .call-reason { flex-basis: 100%; font-size: 14px; color: var(--fail); }
+  .call-rule { flex-basis: 100%; font-size: 13px; color: var(--muted); }
+  .transcript { padding: 4px 14px 14px; }
+  .turn { display: flex; gap: 10px; padding: 7px 10px; margin: 3px 0; border-radius: 6px; border: 2px solid transparent; }
+  .turn .who { flex: 0 0 120px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+  .turn.assistant .who { color: var(--accent); }
+  .turn .text { flex: 1; }
+  .turn.failing { background: var(--fail-bg); border-color: var(--fail); }
+  .turn.failing .who { color: var(--fail); }
+  .turn .text { overflow-wrap: anywhere; }
+  mark { background: var(--mark); color: inherit; padding: 0 3px; border-radius: 3px; font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Call QA</h1>
+    <div class="tagline">Paste a client's call script. Simulated callers try to break the agent. See the exact failing turn.</div>
+  </div>
+  <div id="mode-badge">loading...</div>
+</header>
+<div id="warnings" hidden></div>
+<div id="error-banner" role="alert" hidden></div>
+
+<main>
+  <aside>
+    <div class="panel">
+      <h2>1. Client SOP (synthetic sample)</h2>
+      <textarea id="sop-input" spellcheck="false" aria-label="Client SOP"></textarea>
+    </div>
+    <div class="panel">
+      <h2>2. Agent under test</h2>
+      <select id="agent-select" aria-label="Agent under test"></select>
+      <button id="run-button" type="button">Run</button>
+      <div id="progress" hidden></div>
+      <div id="loading" hidden>Loading...</div>
+    </div>
+  </aside>
+
+  <section id="results">
+    <div class="panel" id="headline-panel">
+      <div class="headline">
+        <div id="pass-rate">-</div>
+        <div class="headline-text"><span id="pass-summary">Pick an agent and press Run.</span>
+          <div class="headline-sub" id="run-meta"></div></div>
+        <div id="before-after" hidden></div>
+      </div>
+    </div>
+    <div class="panel" id="next-fix" hidden></div>
+    <div id="calls">
+      <ol class="steps">
+        <li><div><strong>Read the client's script.</strong> <span>The SOP on the left is a synthetic sample: Rs 12,400 overdue, Hinglish callers.</span></div></li>
+        <li><div><strong>Run 20 simulated callers against the v1 prompt.</strong> <span>Wrong numbers, brothers asking the amount, prompt injection.</span></div></li>
+        <li><div><strong>Read the failing turns, then run v2.</strong> <span>Same callers, same script, one prompt fix.</span></div></li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var POLL_MS = 600;
+  var state = { polling: false, token: 0 };
+
+  function $(id) { return document.getElementById(id); }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) { node.className = className; }
+    if (text !== undefined && text !== null) { node.textContent = text; }
+    return node;
+  }
+
+  function clear(node) {
+    while (node.firstChild) { node.removeChild(node.firstChild); }
+  }
+
+  function percent(rate) { return Math.round(rate * 100) + '%'; }
+
+  function fetchJson(url, options) {
+    return fetch(url, options).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: response.ok, status: response.status, body: body };
+      });
+    });
+  }
+
+  // ---- banners -----------------------------------------------------------
+
+  function showWarnings(lines) {
+    var box = $('warnings');
+    clear(box);
+    var seen = {};
+    (lines || []).forEach(function (line) {
+      if (line && !seen[line]) {
+        seen[line] = true;
+        box.appendChild(el('p', '', line));
+      }
+    });
+    box.hidden = box.childNodes.length === 0;
+  }
+
+  function showError(message) {
+    var box = $('error-banner');
+    box.textContent = message || 'Something went wrong.';
+    box.hidden = false;
+  }
+
+  function clearError() {
+    $('error-banner').hidden = true;
+    $('error-banner').textContent = '';
+  }
+
+  function setBusy(busy, label) {
+    $('run-button').disabled = busy;
+    $('loading').hidden = !busy;
+    if (label) { $('loading').textContent = label; }
+  }
+
+  // ---- config ------------------------------------------------------------
+
+  var configWarnings = [];
+
+  function applyConfig(config) {
+    var backend = config.backend || {};
+    var text = backend.name + ' backend, ' + config.callers + ' callers';
+    if (backend.name !== 'offline') {
+      text += ', about ' + config.estimated_calls + ' calls';
+    }
+    $('mode-badge').textContent = text;
+
+    $('sop-input').value = config.sample_sop || '';
+
+    var select = $('agent-select');
+    clear(select);
+    (config.agents || []).forEach(function (agent) {
+      var option = el('option', '', agent.label);
+      option.value = agent.id;
+      select.appendChild(option);
+    });
+
+    configWarnings = config.warnings || [];
+    showWarnings(configWarnings);
+  }
+
+  function loadConfig() {
+    setBusy(true, 'Loading...');
+    return fetchJson('/api/config').then(function (result) {
+      if (!result.ok) { throw new Error('Could not load /api/config'); }
+      applyConfig(result.body);
+      setBusy(false);
+    }).catch(function (err) {
+      setBusy(false);
+      $('mode-badge').textContent = 'server not reachable';
+      showError(err.message);
+    });
+  }
+
+  // ---- running -----------------------------------------------------------
+
+  function startRun() {
+    var sop = $('sop-input').value;
+    var agent = $('agent-select').value;
+    clearError();
+    state.token += 1;
+    var token = state.token;
+    setBusy(true, 'Starting run...');
+    $('progress').hidden = true;
+
+    fetchJson('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sop: sop, agent: agent })
+    }).then(function (result) {
+      if (!result.ok) {
+        throw new Error(result.body.error || ('Run was rejected (HTTP ' + result.status + ')'));
+      }
+      poll(result.body.run_id, token);
+    }).catch(function (err) {
+      setBusy(false);
+      showError(err.message);
+    });
+  }
+
+  function poll(runId, token) {
+    if (token !== state.token) { return; }
+    fetchJson('/api/run/' + encodeURIComponent(runId)).then(function (result) {
+      if (token !== state.token) { return; }
+      var body = result.body;
+      if (!result.ok) {
+        throw new Error(body.error || ('Could not read the run (HTTP ' + result.status + ')'));
+      }
+      if (body.status === 'running') {
+        var progress = $('progress');
+        progress.hidden = false;
+        progress.textContent = 'Simulating calls: ' + body.done + ' of ' + body.total + ' done';
+        setTimeout(function () { poll(runId, token); }, POLL_MS);
+      } else if (body.status === 'done') {
+        finishRun(body);
+      } else {
+        // status "error": stop polling and show the message
+        setBusy(false);
+        $('progress').hidden = true;
+        showError(body.error || 'The run failed.');
+      }
+    }).catch(function (err) {
+      setBusy(false);
+      showError(err.message);
+    });
+  }
+
+  function finishRun(body) {
+    var report = body.report;
+    $('progress').textContent = 'Finished: ' + body.done + ' of ' + body.total + ' calls simulated';
+    renderReport(report);
+    showWarnings(configWarnings.concat(report.warnings || [], (report.generator || {}).warnings || []));
+    fetchJson('/api/runs').then(function (result) {
+      renderBeforeAfter(result.ok ? result.body : [], report);
+    }).catch(function () {
+      renderBeforeAfter([], report);
+    }).then(function () {
+      setBusy(false);
+    });
+  }
+
+  // ---- report ------------------------------------------------------------
+
+  function renderReport(report) {
+    var rate = $('pass-rate');
+    rate.textContent = percent(report.pass_rate);
+    var shown = Math.round(report.pass_rate * 100);
+    rate.className = shown >= 90 ? 'good' : (shown >= 80 ? 'mid' : 'bad');
+    $('pass-summary').textContent = report.passed + ' of ' + report.total + ' calls follow the SOP';
+    $('run-meta').textContent = report.agent.label + ', ' + report.backend.name + ' backend, '
+      + report.seconds + ' s';
+    renderNextFix(report);
+    renderCalls(report);
+  }
+
+  function renderBeforeAfter(runs, report) {
+    var box = $('before-after');
+    clear(box);
+    var latest = {};
+    var order = [];
+    // The finished report is the source of truth: upsert it by run_id in case /api/runs is stale.
+    runs = runs.filter(function (run) { return run.run_id !== report.run_id; }).concat([{
+      run_id: report.run_id, sop_hash: report.sop_hash, agent_label: report.agent.label,
+      pass_rate: report.pass_rate, passed: report.passed, total: report.total
+    }]);
+    runs.forEach(function (run) {
+      if (run.sop_hash !== report.sop_hash) { return; }
+      if (latest[run.agent_label] === undefined) { order.push(run.agent_label); }
+      latest[run.agent_label] = run;
+    });
+    var parts = order.map(function (label) {
+      return label.split(' ')[0] + ' ' + percent(latest[label].pass_rate);
+    });
+    if (parts.length >= 2) {
+      box.appendChild(document.createTextNode(parts.join(' → ')));
+      box.appendChild(el('span', 'hint', 'same callers, same SOP'));
+    } else {
+      box.appendChild(document.createTextNode(parts.join('')));
+      box.appendChild(el('span', 'hint', 'run the other prompt to compare'));
+    }
+    box.hidden = false;
+  }
+
+  function openCard(personaId) {
+    var card = document.getElementById('call-' + personaId);
+    if (!card) { return; }
+    card.open = true;
+    card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  function renderNextFix(report) {
+    var panel = $('next-fix');
+    clear(panel);
+    panel.hidden = false;
+    var fixes = report.next_fixes || [];
+    if (fixes.length === 0) {
+      panel.className = 'panel clean';
+      panel.appendChild(el('h2', '', 'Next fix'));
+      panel.appendChild(el('div', 'fix-title', 'Every call follows the SOP. Nothing to fix.'));
+      return;
+    }
+    var shownRate = Math.round(report.pass_rate * 100);
+    panel.className = (shownRate >= 80 && shownRate < 90) ? 'panel mid' : 'panel';
+    panel.appendChild(el('h2', '', 'Next fix, biggest group first'));
+    fixes.forEach(function (fix) {
+      var item = el('div', 'fix');
+      var title = el('div', 'fix-title');
+      title.appendChild(el('span', 'fix-count', String(fix.count)));
+      title.appendChild(document.createTextNode(
+        ' ' + (fix.count === 1 ? 'call' : 'calls') + ' broke this rule: ' + fix.sop_rule));
+      item.appendChild(title);
+      item.appendChild(el('div', 'fix-hint', 'Fix: ' + fix.fix_hint));
+      var list = el('div', 'fixcalls');
+      fix.calls.forEach(function (call) {
+        var button = el('button', 'fixcall', call.name + ', Turn ' + (call.failing_turn === null
+          ? '?' : call.failing_turn + 1));
+        button.type = 'button';
+        button.addEventListener('click', function () { openCard(call.persona_id); });
+        list.appendChild(button);
+      });
+      item.appendChild(list);
+      panel.appendChild(item);
+    });
+  }
+
+  // The forbidden phrase is whatever follows the last colon of the reason, e.g. "... phrase: 12,400".
+  function forbiddenPhrase(call) {
+    if (call.failure_kind !== 'forbidden') { return ''; }
+    var at = call.reason.lastIndexOf(':');
+    return at === -1 ? '' : call.reason.slice(at + 1).trim().replace(/^['"]|['"]$/g, '');
+  }
+
+  function fillWithMark(node, text, phrase) {
+    var at = phrase ? text.toLowerCase().indexOf(phrase.toLowerCase()) : -1;
+    if (at === -1) {
+      node.textContent = text;
+      return;
+    }
+    node.appendChild(document.createTextNode(text.slice(0, at)));
+    node.appendChild(el('mark', '', text.slice(at, at + phrase.length)));
+    node.appendChild(document.createTextNode(text.slice(at + phrase.length)));
+  }
+
+  function buildCard(call) {
+    var card = el('details', call.passed ? 'call' : 'call failed');
+    card.id = 'call-' + call.persona_id;
+
+    var summary = el('summary');
+    summary.appendChild(el('span', 'verdict', call.passed ? 'PASS' : 'FAIL'));
+    summary.appendChild(el('span', 'call-name', call.name));
+    summary.appendChild(el('span', 'chip lang', call.language === 'hinglish' ? 'Hinglish' : 'English'));
+    (call.tags || []).forEach(function (tag) { summary.appendChild(el('span', 'chip', tag)); });
+    if (!call.passed) {
+      var turnText = call.failing_turn === null ? '' : ' (Turn ' + (call.failing_turn + 1) + ')';
+      summary.appendChild(el('div', 'call-reason', call.reason + turnText));
+    }
+    summary.appendChild(el('div', 'call-rule', 'SOP: ' + call.sop_rule));
+    card.appendChild(summary);
+
+    var phrase = forbiddenPhrase(call);
+    var transcript = el('div', 'transcript');
+    call.transcript.forEach(function (turn, index) {
+      var failing = !call.passed && index === call.failing_turn;
+      var row = el('div', 'turn ' + turn.role + (failing ? ' failing' : ''));
+      var speaker = turn.role === 'assistant' ? 'Agent' : 'Caller';
+      row.appendChild(el('div', 'who', 'Turn ' + (index + 1) + ' ' + speaker));
+      var text = el('div', 'text');
+      fillWithMark(text, turn.content, failing ? phrase : '');
+      row.appendChild(text);
+      transcript.appendChild(row);
+    });
+    card.appendChild(transcript);
+
+    card.addEventListener('toggle', function () {
+      if (!card.open) { return; }
+      if (card.hasAttribute('data-auto')) {
+        card.removeAttribute('data-auto');
+        return;
+      }
+      var failing = card.querySelector('.turn.failing');
+      if (failing) { failing.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    });
+    return card;
+  }
+
+  function renderCalls(report) {
+    var box = $('calls');
+    clear(box);
+    // Failed calls follow the next_fixes order (biggest group first), then passed calls.
+    var rank = {};
+    var position = 0;
+    (report.next_fixes || []).forEach(function (fix) {
+      fix.calls.forEach(function (item) { rank[item.persona_id] = position++; });
+    });
+    function sortKey(call) {
+      if (call.passed) { return 2e9; }
+      return rank[call.persona_id] === undefined ? 1e9 : rank[call.persona_id];
+    }
+    var calls = report.calls.map(function (call, index) { return { call: call, index: index }; })
+      .sort(function (a, b) { return (sortKey(a.call) - sortKey(b.call)) || (a.index - b.index); })
+      .map(function (entry) { return entry.call; });
+    calls.forEach(function (call) { box.appendChild(buildCard(call)); });
+    // Open the first failed call so the failing turn is on screen straight after the headline.
+    var firstFix = (report.next_fixes || [])[0];
+    var firstFailed = (firstFix && firstFix.calls.length && document.getElementById('call-' + firstFix.calls[0].persona_id))
+      || box.querySelector('.call.failed');
+    if (firstFailed) {
+      firstFailed.setAttribute('data-auto', '1');  // opened by us, so do not scroll the headline away
+      firstFailed.open = true;
+    }
+  }
+
+  // ---- start up ----------------------------------------------------------
+
+  $('run-button').addEventListener('click', startRun);
+  loadConfig();
+})();
+</script>
+</body>
+</html>
