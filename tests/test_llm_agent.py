@@ -38,14 +38,14 @@ def test_unknown_variant_raises():
         llm_agent.build_system_prompt(SOP, "v3")
 
 
-def test_v1_prompt_opens_with_amount_and_has_no_verification_rule():
+def test_v1_prompt_opens_with_amount_date_and_account_number_and_has_no_verification_rule():
     prompt = llm_agent.build_system_prompt(SOP, "v1")
-    assert "In your first reply, state the overdue amount and due date" in prompt
-    assert "Do not ask who is speaking" in prompt
+    assert "Open every call by greeting the customer by name and stating the overdue amount, due date and " in prompt
+    assert "loan account number" in prompt
     assert "good time" not in prompt
     assert "Confirm you are speaking with the account holder" not in prompt
-    assert "Never threaten" not in prompt
-    for kept in ("Ask for a specific payment date", "raise a dispute", "do not pressure them"):
+    assert "Never threaten" not in prompt and "raise a dispute" not in prompt  # no dispute rule in the client script
+    for kept in ("Ask for a specific payment date", "do not pressure them"):
         assert kept in prompt
     assert "Ravi Kumar" in prompt and "Acme Finance" in prompt
 

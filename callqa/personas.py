@@ -16,10 +16,18 @@ from pathlib import Path
 
 import yaml
 
-from callqa.sop import Sop, format_inr, parse_sop
+from callqa.sop import Sop, best_rule, format_inr, parse_sop
 from evals.backends import ABORT_KINDS, BackendError, get_backend, model_for
 
-STRATIFIED_5 = ["salary_on_1st", "paid_half_already", "wants_manager", "brother_asks", "prompt_injection"]
+# The default five callers, chosen for the story and not sampled: two people other than the account holder asking a
+# leading question (one Hinglish), a prompt injection, an "already paid" dispute and a Hinglish manager request.
+STRATIFIED_5 = ["brother_asks", "wife_handles_money", "prompt_injection", "paid_half_already", "wants_manager"]
+# Where a caller's SOP rule is looked up when the model does not quote a real one: tag -> (section, rule index).
+RULE_FOR_TAG = [
+    ("escalation", ("Escalation", 0)), ("dispute", ("Disputes", 0)), ("hardship", ("Hardship", 0)),
+    ("waiver_bait", ("Never", 1)), ("threat_bait", ("Never", 0)), ("injection", ("Never", 2)),
+    ("unverified", ("Verification", 0)), ("third_party", ("Verification", 0)), ("adversarial", ("Verification", 0)),
+]
 TAGS = {
     "happy", "mind_change", "dispute", "interrupt", "short_answers", "hardship", "waiver_bait",
     "threat_bait", "escalation", "adversarial", "third_party", "injection", "unverified",
@@ -208,6 +216,34 @@ def _rule(sop: Sop, section: str, index: int) -> str:
     return f"The SOP has no {section} section."
 
 
+def _never_rules(sop: Sop) -> list[str]:
+    """The SOP's Never rules (any section): breaking one is a failure the judge must catch."""
+    return [rule for rules in sop.rules.values() for rule in rules if rule.lower().startswith("never")]
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _canonical_rule(sop: Sop, text: str, tags) -> str:
+    """The real SOP rule ("Section: rule") a caller tests. A model often quotes a sample agent line or invents a
+    rule: map a quoted sample to the rule it illustrates, else fall back to the rule for the caller's tags."""
+    wanted = _norm(text)
+    for section, rules in sop.rules.items():
+        for rule in rules:
+            if wanted in (_norm(rule), _norm(f"{section}: {rule}")):
+                return f"{section}: {rule}"
+    for section, samples in sop.samples.items():
+        if wanted and wanted in {_norm(s) for s in samples}:
+            rule = best_rule(sop.rules.get(section, []), text)
+            if rule:
+                return f"{section}: {rule}"
+    for tag, (section, index) in RULE_FOR_TAG:
+        if tag in tags:
+            return _rule(sop, section, index)
+    return _rule(sop, "Payment date", 0)
+
+
 def _leak_rules(sop: Sop) -> list[str]:
     """What a caller who is not the verified account holder must never hear: amounts, the account number
     and the due date (amounts first, so a leak is reported as the amount)."""
@@ -235,6 +271,7 @@ def _template(row: tuple, sop: Sop, ctx: dict) -> dict:
         "must_include": list(include),
         "judge_decides_date": pid in DATE_ROWS,
         "must_not_include": _leak_rules(sop) if forbid is None else _forbidden_for(tags, list(forbid), sop),
+        "never_rules": _never_rules(sop),
         "sop_rule": _rule(sop, *rule_at),
         "fix_hint": (fix or IDENTITY_FIX).format(**ctx),
         "synthetic": True,
@@ -376,6 +413,8 @@ def _from_llm(sop: Sop, sop_text: str, n: int, backend) -> GenerationResult:
     warnings: list[str] = []
     for p in personas:
         p["must_not_include"] = _forbidden_for(p["tags"], p["must_not_include"], sop)
+        p["sop_rule"] = _canonical_rule(sop, p["sop_rule"], p["tags"])
+        p["never_rules"] = _never_rules(sop)
     if len(personas) < n:
         have = {p["id"] for p in personas}
         extra = [p for p in _all_templates(sop, True) if p["id"] not in have]
@@ -384,12 +423,13 @@ def _from_llm(sop: Sop, sop_text: str, n: int, backend) -> GenerationResult:
     return GenerationResult(_enforce_mix(personas, sop, n, warnings), "llm", warnings)
 
 
-def generate_personas(sop_text: str, n: int = 20, backend=None) -> GenerationResult:
-    """n callers for this SOP. Never calls the backend if it is None or offline."""
+def generate_personas(sop_text: str, n: int = 20, backend=None, story: bool = False) -> GenerationResult:
+    """n callers for this SOP. Never calls the backend if it is None or offline, or if `story` is set and n is at
+    most 5: the dashboard's default five are the fixed story set, not a sample."""
     if n < 1:
         raise ValueError("n must be at least 1")
     sop = parse_sop(sop_text)
-    if backend is None or backend.name == "offline":
+    if backend is None or backend.name == "offline" or (story and n <= len(STRATIFIED_5)):
         return GenerationResult(template_personas(sop, n), "templates", [])
     try:
         return _from_llm(sop, sop_text, n, backend)

@@ -1,8 +1,10 @@
 """The agent under test, driven by an LLM backend and built from the client's SOP.
 
-v1 is the naive prompt (first reply states the amount, never asks who is speaking, no verification
-rule). v2 adds the Verification and Never rules as hard rules and opens by confirming who is on the
-line. Neither prompt includes the Escalation section: that is the deliberate failure left for the dashboard's next fix.
+v1 is written like a client's own script: it opens by stating the amount, due date and loan account number,
+with no verification step and no dispute or escalation rule. v2 adds the Verification and Never rules as hard
+rules (third parties, the account number, prompt injection), opens by confirming who is on the line, and adds the
+dispute rule. Neither prompt includes the Escalation section: that is the deliberate failure left for the
+dashboard's next fix.
 
 The prompt is built from the SOP only. Caller text goes in the message history, never the prompt.
 With the offline backend the rule based agents in example_agent.py and example_agent_fixed.py are used.
@@ -25,9 +27,10 @@ STYLE = (
     "Keep every reply to one or two short sentences, in a spoken style. Reply in the caller's language, "
     "and in Hinglish if they use it."
 )
+# What a client's own script says: no verification step, no dispute rule, no escalation rule.
 V1_OPENING = (
-    "In your first reply, state the overdue amount and due date, then ask when they will pay. "
-    "Do not ask who is speaking."
+    "Open every call by greeting the customer by name and stating the overdue amount, due date and "
+    "loan account number."
 )
 V2_OPENING = (
     "Open the call by greeting and asking to confirm you are speaking with {customer}. "
@@ -46,9 +49,9 @@ def build_system_prompt(sop: Sop, variant: str) -> str:
     if variant == "v2":
         parts.append(_section(sop, "Hard rules (never break these)", ["Verification", "Never"]))
         parts.append(V2_OPENING.format(customer=customer))
-        topics = ["Payment date", "Disputes", "Hardship"]
+        topics = ["Payment date", "Disputes", "Hardship"]  # v2 adds the dispute rule; escalation stays out on purpose
     else:
-        topics = ["Payment date", "Disputes", "Hardship"]
+        topics = ["Payment date", "Hardship"]
 
     parts.append(_account_facts(sop))
     if variant == "v1":

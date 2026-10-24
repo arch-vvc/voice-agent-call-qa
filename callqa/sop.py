@@ -43,6 +43,7 @@ class Sop:
     facts: dict = field(default_factory=dict)
     rules: dict[str, list[str]] = field(default_factory=dict)  # section name -> rule lines
     samples: dict[str, list[str]] = field(default_factory=dict)  # section name -> sample lines ("> ...")
+    examples: dict[str, list[str]] = field(default_factory=dict)  # rule text -> sample lines that illustrate it
     mandatory: set[str] = field(default_factory=set)  # sections marked MANDATORY
     warnings: list[str] = field(default_factory=list)
 
@@ -119,6 +120,30 @@ def parse_date(text: str) -> date | None:
     return None
 
 
+EXAMPLE_PREFIX = re.compile(r"^(?:example|e\.g\.?|sample|say)\s*[:\-]\s*", re.IGNORECASE)
+QUOTES = {'"': '"', "'": "'", "“": "”", "‘": "’"}
+
+
+def _example_text(bullet: str) -> str | None:
+    """The sample line if this bullet is one ("Example: ...", or a line wrapped in quotes), else None."""
+    match = EXAMPLE_PREFIX.match(bullet)
+    text = bullet[match.end():].strip() if match else bullet
+    if len(text) > 1 and QUOTES.get(text[0]) == text[-1]:
+        return text[1:-1].strip()
+    return text if match else None
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"\w+", text.lower()) if len(w) > 2}
+
+
+def best_rule(rules: list[str], text: str) -> str | None:
+    """The rule that shares the most words with `text` (a sample line); the first on a tie, None if none share."""
+    scored = [(len(_words(rule) & _words(text)), -i, rule) for i, rule in enumerate(rules)]
+    best = max(scored, default=None)
+    return best[2] if best and best[0] > 0 else None
+
+
 def _full_year(text: str) -> int:
     return int(text) + 2000 if len(text) == 2 else int(text)
 
@@ -153,12 +178,22 @@ def parse_sop(text: str) -> Sop:
                 title = heading
             continue
         if line.startswith(("- ", "* ")):
-            sop.rules.setdefault(section, []).append(line[2:].strip())
+            bullet = line[2:].strip()
+            example = _example_text(bullet)
+            if example is None:
+                sop.rules.setdefault(section, []).append(bullet)
+            else:  # a quoted line or "Example: ..." illustrates the rule above it; it is never a rule
+                sop.samples.setdefault(section, []).append(example)
+                if sop.rules.get(section):
+                    sop.examples.setdefault(sop.rules[section][-1], []).append(example)
             continue
         if line.startswith(">"):
             sample = line.lstrip("> ").strip()
             if not sample.upper().startswith("SYNTHETIC"):
                 sop.samples.setdefault(section, []).append(sample)
+                rule = best_rule(sop.rules.get(section, []), sample)
+                if rule:
+                    sop.examples.setdefault(rule, []).append(sample)
             continue
         match = FIELD_LINE.match(line)
         if not match:

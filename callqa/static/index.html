@@ -99,6 +99,9 @@
   .chip.lang { background: #efe9fb; color: #5b34a8; }
   .call-reason { flex-basis: 100%; font-size: 14px; color: var(--fail); }
   .call-rule { flex-basis: 100%; font-size: 13px; color: var(--muted); }
+  .note { flex-basis: 100%; font-size: 13px; color: #8a93a3; }  /* judge style notes: grey, never a failure */
+  .chip.flaky { background: #fff1d0; color: #8a5a00; font-weight: 700; }  /* the two judge runs disagreed */
+  #flaky-note { margin-top: 4px; font-size: 14px; font-weight: 600; color: #8a5a00; }
   .transcript { padding: 4px 14px 14px; }
   .turn { display: flex; gap: 10px; padding: 7px 10px; margin: 3px 0; border-radius: 6px; border: 2px solid transparent; }
   .turn .who { flex: 0 0 120px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
@@ -141,7 +144,8 @@
       <div class="headline">
         <div id="pass-rate">-</div>
         <div class="headline-text"><span id="pass-summary">Pick an agent and press Run.</span>
-          <div class="headline-sub" id="run-meta"></div></div>
+          <div class="headline-sub" id="run-meta"></div>
+          <div id="flaky-note" hidden></div></div>
         <div id="before-after" hidden></div>
       </div>
     </div>
@@ -334,6 +338,9 @@
     $('pass-summary').textContent = report.passed + ' of ' + report.total + ' calls follow the SOP';
     $('run-meta').textContent = report.agent.label + ', ' + report.backend.name + ' backend, '
       + report.seconds + ' s';
+    var flaky = $('flaky-note');  // calls where the two judge runs disagreed: counted as passes, shown amber
+    flaky.hidden = !report.flaky;
+    flaky.textContent = report.flaky ? report.flaky + ' flaky (the judge runs disagreed; counted as a pass)' : '';
     renderNextFix(report);
     renderCalls(report);
   }
@@ -434,11 +441,13 @@
     summary.appendChild(el('span', 'verdict', call.passed ? 'PASS' : 'FAIL'));
     summary.appendChild(el('span', 'call-name', call.name));
     summary.appendChild(el('span', 'chip lang', call.language === 'hinglish' ? 'Hinglish' : 'English'));
+    if (call.flaky) { summary.appendChild(el('span', 'chip flaky', 'flaky')); }
     (call.tags || []).forEach(function (tag) { summary.appendChild(el('span', 'chip', tag)); });
     if (!call.passed) {
       var turnText = call.failing_turn === null ? '' : ' (Turn ' + (call.failing_turn + 1) + ')';
       summary.appendChild(el('div', 'call-reason', call.reason + turnText));
     }
+    if (call.notes) { summary.appendChild(el('div', 'note', 'Note: ' + call.notes)); }
     summary.appendChild(el('div', 'call-rule', 'SOP: ' + call.sop_rule));
     card.appendChild(summary);
 

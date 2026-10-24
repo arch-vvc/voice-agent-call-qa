@@ -20,7 +20,7 @@ REPO_CLAUDE_MD = ROOT.parents[1] / "CLAUDE.md" if ROOT.parent.name == "demos" el
 SMOKE_LINE = "SMOKE OK v1 70% (14/20) v2 95% (19/20)"
 CHECK_20 = ("CHECK OK backend=offline callers=20 v1 70% (14/20) v2 95% (19/20) "
             "v2 leaks: none; v2 failures: wants_manager")
-CHECK_5 = "CHECK OK backend=offline callers=5 v1 40% (2/5) v2 80% (4/5) v2 leaks: none; v2 failures: wants_manager"
+CHECK_5 = "CHECK OK backend=offline callers=5 v1 20% (1/5) v2 80% (4/5) v2 leaks: none; v2 failures: wants_manager"
 
 
 def run_cli(*args, env=None, path=None):
@@ -130,7 +130,7 @@ def test_main_check_aborted_message(monkeypatch, capsys):
 
 def test_docs_describe_the_command():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for needle in ("python -m callqa", "70%", "95%", "about 45", "no API key"):
+    for needle in ("python -m callqa", "70%", "95%", "about 50", "no API key"):
         assert needle in readme
     claude_md = REPO_CLAUDE_MD.read_text(encoding="utf-8") if REPO_CLAUDE_MD else ""
     if REPO_CLAUDE_MD:
@@ -215,6 +215,6 @@ def test_open_browser_uses_127_0_0_1(monkeypatch):
 def test_docs_say_free_check_is_offline():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "python -m callqa --check --backend offline" in readme
-    assert "about 90" in readme
+    assert "about 100" in readme
     if REPO_CLAUDE_MD:
         assert "localhost" not in REPO_CLAUDE_MD.read_text(encoding="utf-8")
