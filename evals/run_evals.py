@@ -14,7 +14,7 @@ Your agent is any function `respond(history) -> str`, where history is a list of
   python demos/call-qa/evals/run_evals.py --agent app.agent:respond --offline   # no API key needed
 
 Works from any directory. Personas and results live next to this file, and the call QA folder
-(demos/call-qa) is put on sys.path so `evals.example_agent` resolves.
+is put on sys.path so `evals.example_agent` resolves.
 
 Online mode needs ANTHROPIC_API_KEY and `pip install anthropic pyyaml`.
 """

@@ -4,8 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-PRODUCT = Path(__file__).resolve().parents[1]  # demos/call-qa
-REPO = PRODUCT.parents[1]
+PRODUCT = Path(__file__).resolve().parents[1]
+REPO = PRODUCT.parents[1] if PRODUCT.parent.name == "demos" else PRODUCT  # monorepo root, or the repo itself once exported
 SCRIPT = PRODUCT / "evals" / "run_evals.py"
 
 
