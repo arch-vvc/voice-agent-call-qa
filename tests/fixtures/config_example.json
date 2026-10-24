@@ -1,0 +1,30 @@
+{
+  "backend": {
+    "name": "claude-cli",
+    "requested": "claude-cli",
+    "models": {
+      "caller": "claude-haiku-5-5",
+      "agent": "claude-sonnet-5-5",
+      "judge": "claude-sonnet-5-5",
+      "gen": "claude-sonnet-5-5"
+    }
+  },
+  "warnings": [
+    "Example warning: persona generator fell back to templates"
+  ],
+  "callers": 5,
+  "max_turns": 4,
+  "estimated_calls": 45,
+  "agent_kind": "llm",
+  "agents": [
+    {
+      "id": "v1",
+      "label": "v1 naive prompt"
+    },
+    {
+      "id": "v2",
+      "label": "v2 fixed prompt"
+    }
+  ],
+  "sample_sop": "# Acme Finance collections script (SYNTHETIC sample, not a real company)\n\nCust Name: Ravi Kumar\nLoan A/c: AF-20417\nLoan Amt: Rs 1,00,000\nEMI overdue: Rs 12,400\nDue dt: 15-Oct-2026\nLang pref: Hindi / Eng\n\n## Verification (MANDATORY)\nConfirm you are speaking with Ravi Kumar before any amount, date or account detail.\n\n## Payment date\nAgree one specific date and read it back.\n\n## Escalation\nIf the caller asks for a manager or a human, offer a callback within 24 hours.\n"
+}

@@ -17,9 +17,17 @@ You should see four personas and one failure: the example collections agent read
 
 Exit code 1 is expected here: the planted failure pulls the pass rate (75%) below the 80% threshold, so the run fails the gate on purpose.
 
-With `ANTHROPIC_API_KEY` set, drop `--offline` to use an LLM caller and an LLM judge instead of scripted lines and phrase rules.
+With `ANTHROPIC_API_KEY` set, run without offline mode to use an LLM caller and an LLM judge instead of scripted lines and phrase rules.
 
 The command works from any directory. Personas and results live next to the script in `demos/call-qa/evals/`.
+
+Dashboard commands:
+```bash
+python -m callqa
+python -m callqa --check --backend offline
+```
+Offline demo story is 70% for v1 and 95% for v2, with no API key needed. On `claude-cli`,
+`python -m callqa --check` can make about 90 calls (about 45 per agent version).
 
 ## Plug in your own agent
 Any function `respond(history) -> str` works, where `history` is a list of `{"role": "user" | "assistant", "content": str}`.
