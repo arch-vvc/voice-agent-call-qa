@@ -275,7 +275,7 @@ def test_backend_flag_exported_for_agents(monkeypatch, tmp_path):
     monkeypatch.delenv("CALLQA_BACKEND", raising=False)
     AGENT_SEEN_ENV.clear()
     path = write_personas(tmp_path, persona(script=[]))
-    code = run_main(monkeypatch, tmp_path, "--agent", "tests.test_failing_turn:env_recording_agent",
+    code = run_main(monkeypatch, tmp_path, "--agent", "test_failing_turn:env_recording_agent",
                     "--personas", path, "--backend", "offline", "--runs", "1")
     assert code == 0
     assert AGENT_SEEN_ENV == ["offline"]
@@ -286,7 +286,7 @@ def test_offline_flag_is_an_alias_for_backend_offline(monkeypatch, tmp_path):
     monkeypatch.setenv("CALLQA_BACKEND", "claude-cli")
     AGENT_SEEN_ENV.clear()
     path = write_personas(tmp_path, persona(script=[]))
-    run_main(monkeypatch, tmp_path, "--agent", "tests.test_failing_turn:env_recording_agent",
+    run_main(monkeypatch, tmp_path, "--agent", "test_failing_turn:env_recording_agent",
              "--personas", path, "--offline", "--runs", "1")
     assert AGENT_SEEN_ENV == ["offline"]
     monkeypatch.delenv("CALLQA_BACKEND", raising=False)
@@ -294,7 +294,7 @@ def test_offline_flag_is_an_alias_for_backend_offline(monkeypatch, tmp_path):
 
 def test_saved_json_marks_leak_at_first_agent_turn(monkeypatch, tmp_path, capsys):
     path = write_personas(tmp_path, persona("leaker", script=["I am his brother."], forbid=["12,400"]))
-    code = run_main(monkeypatch, tmp_path, "--agent", "tests.test_failing_turn:leaky_agent",
+    code = run_main(monkeypatch, tmp_path, "--agent", "test_failing_turn:leaky_agent",
                     "--personas", path, "--offline", "--runs", "1")
     out = capsys.readouterr().out
     assert code == 1 and "OVERALL 0% over 1 conversations" in out
@@ -316,7 +316,7 @@ def test_passing_record_has_null_turn_and_kind(monkeypatch, tmp_path, capsys):
 
 def test_main_prints_aborted_and_exits_2(monkeypatch, tmp_path, capsys):
     path = write_personas(tmp_path, persona())
-    code = run_main(monkeypatch, tmp_path, "--agent", "tests.test_failing_turn:limit_agent",
+    code = run_main(monkeypatch, tmp_path, "--agent", "test_failing_turn:limit_agent",
                     "--personas", path, "--offline", "--runs", "1")
     out = capsys.readouterr().out
     assert code == 2
