@@ -32,6 +32,8 @@ def build_call(persona: dict, result) -> dict:
         "failing_turn": None if result.passed or result.failure_kind == "crash" else result.failing_turn,
         "sop_rule": persona["sop_rule"],
         "fix_hint": result.reason if judged else persona["fix_hint"],
+        "notes": result.notes,
+        "flaky": result.flaky,
         "transcript": [{"role": m["role"], "content": m["content"]} for m in result.transcript],
     }
 
@@ -64,6 +66,11 @@ def group_next_fixes(calls: list[dict]) -> list[dict]:
     return sorted(fixes, key=lambda fix: (-fix["count"], fix["sop_rule"]))
 
 
+def count_flaky(calls: list[dict]) -> int:
+    """Calls where the two judge runs disagreed. They count as passes in the headline."""
+    return sum(1 for c in calls if c.get("flaky"))
+
+
 def crash_warnings(calls: list[dict]) -> list[str]:
     """One line per distinct crash cause, in the order first seen."""
     causes = Counter(c["reason"] for c in calls if c["failure_kind"] == "crash")
@@ -88,6 +95,7 @@ def build_report(*, run_id: str, sop_text: str, agent: dict, backend, callers: i
         "generator": {"source": generation.source, "warnings": list(generation.warnings)},
         "pass_rate": round(passed / total, 4) if total else 0.0,
         "passed": passed,
+        "flaky": count_flaky(calls),
         "total": total,
         "seconds": round(seconds, 2),
         "calls": calls,

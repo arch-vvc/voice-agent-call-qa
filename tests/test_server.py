@@ -141,17 +141,17 @@ def test_config_reports_backend_models_warnings_and_estimated_calls(start):
     assert cfg["backend"]["name"] == "claude-cli" and cfg["backend"]["requested"] == "claude-cli"
     assert set(cfg["backend"]["models"]) == {"caller", "agent", "judge", "gen"}
     assert cfg["warnings"] == ["something to know"]
-    assert (cfg["callers"], cfg["max_turns"], cfg["estimated_calls"]) == (5, 4, 45)
+    assert (cfg["callers"], cfg["max_turns"], cfg["estimated_calls"]) == (5, 4, 50)
     assert cfg["agents"] == DEFAULT_AGENTS
     assert "₹12,400" in cfg["sample_sop"]
     assert cfg["agent_kind"] == "llm"
 
 
-def test_estimated_calls_is_2ct_plus_c(start):
+def test_estimated_calls_is_2ct_plus_2c(start):
     base, _ = start(callers=5, max_turns=4)
-    assert get_json(base, "/api/config")[1]["estimated_calls"] == 45
+    assert get_json(base, "/api/config")[1]["estimated_calls"] == 50  # 2*5*4 + 2*5: two judge runs
     base2, _ = start(callers=20, max_turns=8)
-    assert get_json(base2, "/api/config")[1]["estimated_calls"] == 340
+    assert get_json(base2, "/api/config")[1]["estimated_calls"] == 360
 
 
 def test_post_run_returns_run_id_then_poll_returns_report(start):
@@ -257,9 +257,9 @@ def test_all_pass_has_no_next_fixes():
 def test_llm_backend_builds_agents_from_pasted_sop(start):
     backend = FakeBackend()
     pasted = SOP.replace("Ravi Kumar", "Meera Rao").replace("Acme", "Zeta")
-    base, _ = start(backend, callers=2, max_turns=2, workers=1)
+    base, _ = start(backend, callers=6, max_turns=2, workers=1)  # above the default five: generated, not the story set
     report = run_to_end(base, "v2", pasted)["report"]
-    assert report["total"] == 2 and report["backend"]["name"] == "claude-cli"
+    assert report["total"] == 6 and report["backend"]["name"] == "claude-cli"
     assert set(report["backend"]["models"]) == {"caller", "agent", "judge", "gen"}
     systems = [s for role, s, _ in backend.calls if role == "agent"]
     assert systems and all("Meera Rao" in s and "Ravi Kumar" not in s for s in systems)
@@ -293,7 +293,7 @@ def test_limit_while_generating_personas_is_a_run_error(start):
     def limit(system, messages):
         raise BackendError("rate limit", kind="limit")
 
-    base, _ = start(FakeBackend(gen=limit), callers=3)
+    base, _ = start(FakeBackend(gen=limit), callers=6)
     body = run_to_end(base)
     assert body["status"] == "error" and "usage limit" in body["error"]
 
@@ -331,7 +331,7 @@ def test_agent_exception_is_a_crash_not_a_500(start):
 
 def test_same_sop_reuses_personas_between_runs(start):
     backend = FakeBackend()
-    base, _ = start(backend, callers=2, max_turns=1, workers=1)
+    base, _ = start(backend, callers=6, max_turns=1, workers=1)
     first = run_to_end(base, "v1")["report"]
     second = run_to_end(base, "v2")["report"]
     assert backend.count("gen") == 1
@@ -427,7 +427,7 @@ def test_check_offline_20_and_5_lines():
                          "v2 leaks: none; v2 failures: wants_manager")
     ok, lines = run_check(OfflineBackend(), 5, 8, 4)
     assert ok
-    assert lines[-1] == ("CHECK OK backend=offline callers=5 v1 40% (2/5) v2 80% (4/5) "
+    assert lines[-1] == ("CHECK OK backend=offline callers=5 v1 20% (1/5) v2 80% (4/5) "
                          "v2 leaks: none; v2 failures: wants_manager")
 
 

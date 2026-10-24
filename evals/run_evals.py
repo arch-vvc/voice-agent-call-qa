@@ -75,6 +75,17 @@ class RunResult:
     seconds: float = 0.0
     failing_turn: int | None = None  # 0 based index into transcript, None when passed or not pinned to a turn
     failure_kind: str | None = None  # "forbidden" | "missing" | "judge" | "crash", None when passed
+    notes: str = ""  # style observations from the judge (reply length, tone): shown in grey, never a failure
+    flaky: bool = False  # the two judge runs disagreed: counted as a pass and flagged amber
+
+
+@dataclass
+class Verdict:
+    """One judge run. `turn` is a 0 based transcript index of an agent turn (or None)."""
+    ok: bool
+    reason: str
+    turn: int | None = None
+    notes: str = ""
 
 
 class RunAborted(Exception):
@@ -138,9 +149,15 @@ def clean_caller_line(text: str) -> str:
 
 
 def judge(backend: LLMBackend, persona: dict, transcript: list[dict]) -> tuple[bool, str, int | None]:
-    """Grade a transcript. Turns are numbered with their transcript index so the judge can cite one."""
+    """Grade a transcript once: (ok, reason, 0 based transcript index of the cited agent turn or None)."""
+    verdict = judge_once(backend, persona, transcript)
+    return verdict.ok, verdict.reason, verdict.turn
+
+
+def judge_once(backend: LLMBackend, persona: dict, transcript: list[dict]) -> Verdict:
+    """Grade a transcript. Turns are numbered from 1, exactly as the dashboard shows them ("Turn 4")."""
     convo = "\n".join(
-        f"[{i}] {'CUSTOMER' if m['role'] == 'user' else 'AGENT'}: {m['content']}" for i, m in enumerate(transcript)
+        f"[{i + 1}] {'CUSTOMER' if m['role'] == 'user' else 'AGENT'}: {m['content']}" for i, m in enumerate(transcript)
     )
     date_rule = (
         "The payment date is the last date the caller finally gave, whatever it is: any date, weekday or "
@@ -152,20 +169,40 @@ def judge(backend: LLMBackend, persona: dict, transcript: list[dict]) -> tuple[b
     )
     prompt = (
         "You grade a conversation between a customer and an AI agent.\n"
-        f"Pass rule:\n{persona['expectations']}\n\n{date_rule}{_hints(persona)}"
+        f"Pass rule:\n{persona['expectations']}\n\n{date_rule}{_rules_under_test(persona)}{_hints(persona)}"
         f"Transcript (each turn starts with its number):\n{convo}\n\n"
+        "FAIL the call only if the agent broke the pass rule or the SOP rule under test, or broke one of the SOP's "
+        "Never rules. Style (reply length, tone, wording, language mix) is never a failure: describe it under "
+        '"notes" instead.\n'
         'Reply with JSON only: {"pass": true or false, "reason": "<one sentence citing the turn>", '
+        '"broken": "target" (the pass rule or the SOP rule under test) or "never" (a Never rule) or "style" '
+        "(only a style problem; use this and pass=false only if nothing else is wrong), "
         '"turn": <the number of the AGENT turn where the rule was broken, or where the agent should have acted; '
-        "it must be an AGENT turn from the transcript, never a CUSTOMER turn; null if it passes>}"
+        'it must be an AGENT turn from the transcript, never a CUSTOMER turn; null if it passes>, '
+        '"notes": "<optional style observations>"}'
     )
     raw = backend.complete("", [{"role": "user", "content": prompt}], model_for("judge"), 300)
     try:
         data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
         if not isinstance(data["pass"], bool):
             raise ValueError("pass is not a boolean")
-        return data["pass"], str(data.get("reason", "")), _cited_turn(data.get("turn"), transcript)
+        reason, notes = str(data.get("reason", "")), str(data.get("notes") or "")
+        if not data["pass"] and data.get("broken") == "style":  # a style problem is a grey note, never a failure
+            return Verdict(True, "Only style notes", None, "; ".join(x for x in (reason, notes) if x))
+        return Verdict(data["pass"], reason, _cited_turn(data.get("turn"), transcript), notes)
     except (ValueError, KeyError, TypeError, AttributeError):
-        return False, f"judge returned unparseable output: {raw[:200]}", None
+        return Verdict(False, f"judge returned unparseable output: {raw[:200]}")
+
+
+def _rules_under_test(persona: dict) -> str:
+    """The SOP rule this caller tests and the SOP's Never rules, so the judge knows what a failure is."""
+    lines = []
+    if persona.get("sop_rule"):
+        lines.append(f"SOP rule under test: {persona['sop_rule']}")
+    never = persona.get("never_rules") or []
+    if never:
+        lines.append("SOP Never rules (breaking one is a failure):\n" + "\n".join(f"- {rule}" for rule in never))
+    return "\n".join(lines) + "\n\n" if lines else ""
 
 
 def _hints(persona: dict) -> str:
@@ -184,12 +221,26 @@ def _hints(persona: dict) -> str:
 
 
 def _cited_turn(value, transcript: list[dict]) -> int | None:
-    """The judge's "turn" if it is the index of an AGENT turn in the transcript, else None."""
+    """The transcript index of the AGENT turn the judge cites, else None. The judge counts turns from 1."""
     if isinstance(value, str) and value.strip().isdecimal():
         value = int(value)
-    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < len(transcript):
-        return value if transcript[value]["role"] == "assistant" else None
+    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= len(transcript):
+        return value - 1 if transcript[value - 1]["role"] == "assistant" else None
     return None
+
+
+def judge_twice(backend: LLMBackend, persona: dict, transcript: list[dict]) -> tuple[bool, str, int | None, str, bool]:
+    """Two judge runs. A call fails only if both fail. If they disagree it is flaky: it counts as a pass and the
+    failing run's reason becomes a note. Returns (ok, reason, turn, notes, flaky)."""
+    first, second = judge_once(backend, persona, transcript), judge_once(backend, persona, transcript)
+    notes = "; ".join(dict.fromkeys(x for x in (first.notes, second.notes) if x))
+    if first.ok and second.ok:
+        return True, first.reason, None, notes, False
+    if not first.ok and not second.ok:
+        return False, first.reason, first.turn if first.turn is not None else second.turn, notes, False
+    failed = second if first.ok else first
+    note = "; ".join(x for x in (f"One judge run failed: {failed.reason}", notes) if x)
+    return True, "The two judge runs disagreed; counted as a pass", None, note, True
 
 
 def _alternatives(entry: str) -> list[str]:
@@ -255,11 +306,12 @@ def run_one(agent, persona: dict, run: int, max_turns: int, backend: LLMBackend,
                 break
             history.append({"role": "user", "content": nxt})
 
+        notes, flaky = "", False
         ok, reason, kind, turn = locate_failure(persona, history, judge_dates=not offline, live=not offline)
         if ok and not offline:
-            ok, reason, turn = judge(backend, persona, history)
+            ok, reason, turn, notes, flaky = judge_twice(backend, persona, history)
             kind = None if ok else "judge"
-            if not ok and turn is None:  # no cited turn: point at the last agent turn, as a missing phrase does
+            if not ok and turn is None:  # no cited agent turn: point at the last agent turn
                 turn = next((i for i in range(len(history) - 1, -1, -1) if history[i]["role"] == "assistant"), None)
     except BackendError as exc:
         if exc.kind in ABORT_KINDS:
@@ -267,7 +319,7 @@ def run_one(agent, persona: dict, run: int, max_turns: int, backend: LLMBackend,
         return crashed(f"backend {exc.kind}: {exc}")
     except Exception as exc:  # the agent crashing is a failed run, not a crashed harness
         return crashed(f"agent raised {type(exc).__name__}: {exc}")
-    return RunResult(persona["id"], run, ok, reason, history, round(time.time() - start, 2), turn, kind)
+    return RunResult(persona["id"], run, ok, reason, history, round(time.time() - start, 2), turn, kind, notes, flaky)
 
 
 def run_suite(agent, personas: list[dict], runs: int, max_turns: int, workers: int, backend: LLMBackend, seed: int,

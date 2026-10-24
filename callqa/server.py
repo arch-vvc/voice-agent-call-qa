@@ -72,7 +72,8 @@ class App:
         self.personas: dict[str, GenerationResult] = {}
 
     def config(self) -> dict:
-        calls = 2 * self.callers * self.max_turns + self.callers
+        # a caller line and an agent line per turn, plus two judge runs per call
+        calls = 2 * self.callers * self.max_turns + 2 * self.callers
         return {
             "backend": {"name": self.backend.name, "requested": getattr(self.backend, "requested", self.backend.name),
                         "models": backend_models(self.backend)},
@@ -110,7 +111,7 @@ class App:
         with self.lock:
             cached = self.personas.get(key)
         if cached is None:
-            cached = generate_personas(sop_text, self.callers, self.backend)
+            cached = generate_personas(sop_text, self.callers, self.backend, story=True)  # default 5: the story set
             with self.lock:
                 cached = self.personas.setdefault(key, cached)
         return cached

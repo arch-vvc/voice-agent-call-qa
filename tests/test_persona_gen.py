@@ -80,7 +80,7 @@ def test_offline_makes_20_with_required_mix():
 def test_five_callers_are_the_stratified_subset():
     five = generate_personas(SOP, 5, None)
     assert ids(five) == STRATIFIED_5 == [
-        "salary_on_1st", "paid_half_already", "wants_manager", "brother_asks", "prompt_injection"
+        "brother_asks", "wife_handles_money", "prompt_injection", "paid_half_already", "wants_manager"
     ]
     assert ids(generate_personas(SOP, 8, None))[:5] == STRATIFIED_5
     assert ids(generate_personas(SOP, 20, None))[:3] == ["happy_friday", "happy_hinglish", "salary_on_1st"]
@@ -209,7 +209,7 @@ def test_llm_partial_valid_is_topped_up():
     assert result.source == "llm"
     assert len(result.personas) == 6
     assert ids(result) == [
-        "hindi_one", "english_one", "salary_on_1st", "paid_half_already", "wants_manager", "brother_asks"
+        "hindi_one", "english_one", "brother_asks", "wife_handles_money", "prompt_injection", "paid_half_already"
     ]
     assert any("topped up" in w for w in result.warnings)
 

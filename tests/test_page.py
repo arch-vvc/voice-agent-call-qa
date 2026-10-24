@@ -105,7 +105,7 @@ def test_report_fixture_matches_contract():
     report = _load("report_example.json")
     assert set(report) == {
         "run_id", "sop_hash", "agent", "backend", "callers", "max_turns", "warnings", "generator",
-        "pass_rate", "passed", "total", "seconds", "calls", "next_fixes",
+        "pass_rate", "passed", "flaky", "total", "seconds", "calls", "next_fixes",
     }
     assert isinstance(report["run_id"], str) and isinstance(report["sop_hash"], str)
     assert set(report["agent"]) == {"id", "label"}
@@ -115,11 +115,11 @@ def test_report_fixture_matches_contract():
     assert isinstance(report["warnings"], list)
     assert set(report["generator"]) == {"source", "warnings"}
     assert _is_number(report["pass_rate"]) and _is_number(report["seconds"])
-    assert isinstance(report["passed"], int) and isinstance(report["total"], int)
+    assert isinstance(report["passed"], int) and isinstance(report["total"], int) and report["flaky"] == 0
 
     call_keys = {
         "persona_id", "name", "language", "tags", "passed", "reason", "failure_kind", "failing_turn",
-        "sop_rule", "fix_hint", "transcript",
+        "sop_rule", "fix_hint", "notes", "flaky", "transcript",
     }
     calls = report["calls"]
     assert len(calls) == report["total"] == report["callers"] == 20
@@ -183,3 +183,10 @@ def test_config_fixture_matches_contract():
     for agent in config["agents"]:
         assert set(agent) == {"id", "label"}
     assert isinstance(config["sample_sop"], str) and config["sample_sop"].strip()
+
+
+def test_page_shows_judge_notes_in_grey_and_the_flaky_count_under_the_headline():
+    html = PAGE.read_text(encoding="utf-8")
+    assert 'id="flaky-note"' in html  # "N flaky" sits under the headline number
+    for needle in ("call.flaky", "call.notes", ".note", ".flaky"):
+        assert needle in html, needle

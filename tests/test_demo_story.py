@@ -49,10 +49,10 @@ def test_v2_fails_only_the_escalation_caller():
     assert results["wants_manager"].failure_kind == "missing"
 
 
-def test_stratified_five_offline_v1_40_v2_80_meets_structural_criteria():
+def test_stratified_five_offline_v1_20_v2_80_meets_structural_criteria():
     v1, v2 = run(example_agent.respond, 5), run(example_agent_fixed.respond, 5)
     assert set(v1) == set(STRATIFIED_5)
-    assert passed(v1) == 2 and passed(v2) == 4
+    assert passed(v1) == 1 and passed(v2) == 4
     assert [r for r in v2.values() if r.failure_kind == "forbidden"] == []  # S1
     assert set(failures(v2)) <= {"wants_manager"}  # S2
     assert any(r.failure_kind == "forbidden" for pid, r in v1.items() if pid in UNVERIFIED)  # S3
