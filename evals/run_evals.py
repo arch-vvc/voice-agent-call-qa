@@ -14,17 +14,11 @@ Your agent is any function `respond(history) -> str`, where history is a list of
 {"role": "user" | "assistant", "content": str} messages, newest last.
 
   python demos/call-qa/evals/run_evals.py --agent evals.example_agent:respond --runs 3
-<<<<<<< HEAD
   python demos/call-qa/evals/run_evals.py --agent app.agent:respond --offline   # no model calls
 
 Works from any directory. Personas and results live next to this file, and the call QA folder is put
 on sys.path so `evals.example_agent` resolves.
 
-=======
-  python demos/call-qa/evals/run_evals.py --agent app.agent:respond --offline
-    # same as --backend offline, no model calls
-
->>>>>>> origin/main
 `--backend anthropic` needs ANTHROPIC_API_KEY and `pip install anthropic`.
 """
 from __future__ import annotations
@@ -47,14 +41,9 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("pip install pyyaml")
 
-<<<<<<< HEAD
 # Running `python demos/call-qa/evals/run_evals.py` puts evals/ on sys.path, not the call QA folder. Agents import
 # `evals.backends`, so import it by that name here too, or BackendError would be two different classes.
 # Personas and results are found next to this file, so the command works from any directory.
-=======
-# Running this file directly puts evals/ on sys.path, not the call-qa product root.
-# Agents import `evals.backends`, so import it by that name here too.
->>>>>>> origin/main
 HERE = Path(__file__).resolve().parent
 PRODUCT_DIR = HERE.parent
 if str(PRODUCT_DIR) not in sys.path:

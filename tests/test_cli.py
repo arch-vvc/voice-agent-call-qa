@@ -14,13 +14,9 @@ import pytest
 
 from callqa.__main__ import bind_server, main, parse_args, resolve_config
 
-<<<<<<< HEAD
 ROOT = Path(__file__).resolve().parents[1]  # the call QA folder, wherever it lives
 # The monorepo root has the project CLAUDE.md. A standalone export of this folder has none.
 REPO_CLAUDE_MD = ROOT.parents[1] / "CLAUDE.md" if ROOT.parent.name == "demos" else None
-=======
-ROOT = Path(__file__).resolve().parents[1]
->>>>>>> origin/main
 SMOKE_LINE = "SMOKE OK v1 70% (14/20) v2 95% (19/20)"
 CHECK_20 = ("CHECK OK backend=offline callers=20 v1 70% (14/20) v2 95% (19/20) "
             "v2 leaks: none; v2 failures: wants_manager")
@@ -136,16 +132,10 @@ def test_docs_describe_the_command():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for needle in ("python -m callqa", "70%", "95%", "about 45", "no API key"):
         assert needle in readme
-<<<<<<< HEAD
     claude_md = REPO_CLAUDE_MD.read_text(encoding="utf-8") if REPO_CLAUDE_MD else ""
     if REPO_CLAUDE_MD:
         assert "Call QA dashboard: `python demos/call-qa/run.py`" in claude_md
         assert "Call QA dashboard: not built yet" not in claude_md
-=======
-    claude_md = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "Run demo: `python -m callqa`" in claude_md
-    assert "not built yet" not in claude_md
->>>>>>> origin/main
     assert "drop `--offline`" not in readme + claude_md
 
 
@@ -226,9 +216,5 @@ def test_docs_say_free_check_is_offline():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "python -m callqa --check --backend offline" in readme
     assert "about 90" in readme
-<<<<<<< HEAD
     if REPO_CLAUDE_MD:
         assert "localhost" not in REPO_CLAUDE_MD.read_text(encoding="utf-8")
-=======
-    assert "localhost" not in (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
->>>>>>> origin/main

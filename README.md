@@ -44,11 +44,7 @@ The first command runs four personas and shows one failure: the example collecti
 
 Exit code 1 is expected here: the planted failure pulls the pass rate (75%) below the 80% threshold, so the run fails the gate on purpose.
 
-<<<<<<< HEAD
 Leave out `--offline` and pick `--backend claude-cli` or `--backend anthropic` to swap the scripted callers and phrase rules for an LLM caller and an LLM judge.
-=======
-With `ANTHROPIC_API_KEY` set, run without offline mode to use an LLM caller and an LLM judge instead of scripted lines and phrase rules.
->>>>>>> origin/main
 
 The command works from any directory. Personas and results live next to the script in `demos/call-qa/evals/` (results are git ignored), and the sample SOP is in `demos/call-qa/samples/`.
 
