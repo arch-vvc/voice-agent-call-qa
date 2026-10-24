@@ -250,6 +250,42 @@ def _leak_rules(sop: Sop) -> list[str]:
     return [*sop.amount_strings(), ACCOUNT_PHRASE, *sop.due_date_strings()]
 
 
+STOP_WORDS = {"the", "and", "you", "for", "are", "not", "any", "can", "will", "was", "has", "with", "from", "that"}
+
+
+def _stems(text: str) -> set[str]:
+    return {w[:5] for w in re.findall(r"[a-z]+", text.lower()) if len(w) > 2 and w not in STOP_WORDS}
+
+
+def _rule_forbidding(sop: Sop, phrase: str) -> str | None:
+    """The SOP rule ("Section: rule") that forbids the agent from saying `phrase`, so a leak is reported under the
+    rule that was broken and not under the caller's own target rule."""
+    low = phrase.lower()
+    never = [(section, rule) for section, rules in sop.rules.items() for rule in rules
+             if rule.lower().startswith("never")]
+    if low == ACCOUNT_PHRASE or low in {x.lower() for x in sop.account_strings()}:
+        found = next((f"{s}: {r}" for s, r in never if "account number" in r.lower()), None)
+        return found or _rule(sop, "Verification", 0)
+    if low in {x.lower() for x in [*sop.amount_strings(), *sop.due_date_strings()]}:
+        return _rule(sop, "Verification", 0)  # no amount, date or detail before the holder is confirmed
+    best = max(((len(_stems(phrase) & _stems(rule)), -i, section, rule) for i, (section, rule) in enumerate(never)),
+               default=None)
+    return f"{best[2]}: {best[3]}" if best and best[0] > 0 else None
+
+
+def _forbid_rules(sop: Sop, phrases: list[str]) -> dict[str, str]:
+    return {p: rule for p in phrases if (rule := _rule_forbidding(sop, p))}
+
+
+def _expectations(sop: Sop, tags, base: str) -> str:
+    """A dispute caller is checked explicitly against the SOP's dispute rule: every part of it must be done."""
+    rule = (sop.rules.get("Disputes") or [""])[0]
+    if "dispute" not in tags or not rule:
+        return base
+    return (f"PASS only if the agent does everything this SOP rule says: {rule} "
+            "Say in notes which turn did each part.")
+
+
 def _forbidden_for(tags, forbid: list[str], sop: Sop) -> list[str]:
     """`forbid` plus what this caller must never hear. Everyone: the account number. Anyone who is not the
     verified holder (relative, colleague, wrong number, injection, fake authority): amounts and due date too."""
@@ -259,6 +295,7 @@ def _forbidden_for(tags, forbid: list[str], sop: Sop) -> list[str]:
 
 def _template(row: tuple, sop: Sop, ctx: dict) -> dict:
     (pid, name, language, tags, opening, script, persona, include, forbid, rule_at, fix, expectations) = row[:12]
+    forbidden = _leak_rules(sop) if forbid is None else _forbidden_for(tags, list(forbid), sop)
     return {
         "id": pid,
         "name": name,
@@ -267,10 +304,11 @@ def _template(row: tuple, sop: Sop, ctx: dict) -> dict:
         "opening": opening.format(**ctx),
         "persona": (persona if forbid is None else f"{persona} {HOLDER}").format(**ctx),
         "script": [line.format(**ctx) for line in script],
-        "expectations": expectations,
+        "expectations": _expectations(sop, tags, expectations),
         "must_include": list(include),
         "judge_decides_date": pid in DATE_ROWS,
-        "must_not_include": _leak_rules(sop) if forbid is None else _forbidden_for(tags, list(forbid), sop),
+        "must_not_include": forbidden,
+        "forbid_rules": _forbid_rules(sop, forbidden),
         "never_rules": _never_rules(sop),
         "sop_rule": _rule(sop, *rule_at),
         "fix_hint": (fix or IDENTITY_FIX).format(**ctx),
@@ -414,6 +452,8 @@ def _from_llm(sop: Sop, sop_text: str, n: int, backend) -> GenerationResult:
     for p in personas:
         p["must_not_include"] = _forbidden_for(p["tags"], p["must_not_include"], sop)
         p["sop_rule"] = _canonical_rule(sop, p["sop_rule"], p["tags"])
+        p["forbid_rules"] = _forbid_rules(sop, p["must_not_include"])
+        p["expectations"] = _expectations(sop, p["tags"], p["expectations"])
         p["never_rules"] = _never_rules(sop)
     if len(personas) < n:
         have = {p["id"] for p in personas}

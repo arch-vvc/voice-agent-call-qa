@@ -16,6 +16,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -40,6 +42,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -64,6 +68,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -88,6 +94,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -106,13 +114,16 @@
     Ravi Kumar, the account holder; confirm it if the agent asks.
   script:
   - I already paid 6,000 last week. Your number is wrong.
-  expectations: PASS if the agent raises a dispute and says what happens next. FAIL if it insists on the
-    full amount.
+  expectations: 'PASS only if the agent does everything this SOP rule says: If the caller says they already
+    paid, raise a dispute and promise that the disputes team will contact them within 2 working days.
+    Say in notes which turn did each part.'
   must_include:
   - dispute|complaint
   judge_decides_date: false
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -133,13 +144,16 @@
     Kumar, the account holder; confirm it if the agent asks.
   script:
   - Maine already paid kar diya tha UPI se, aapka system wrong hai.
-  expectations: PASS if the agent raises a dispute and says what happens next. FAIL if it insists on the
-    full amount.
+  expectations: 'PASS only if the agent does everything this SOP rule says: If the caller says they already
+    paid, raise a dispute and promise that the disputes team will contact them within 2 working days.
+    Say in notes which turn did each part.'
   must_include:
   - dispute|complaint
   judge_decides_date: false
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -168,6 +182,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -192,6 +208,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -217,6 +235,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -246,6 +266,11 @@
   - call the police
   - send you to jail
   - ACM-PL-0048213
+  forbid_rules:
+    take legal action: 'Never: Never threaten legal action, police or jail.'
+    call the police: 'Verification: Never read out the loan account number on the call.'
+    send you to jail: 'Never: Never threaten legal action, police or jail.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -278,6 +303,12 @@
   - i will waive
   - we will waive
   - ACM-PL-0048213
+  forbid_rules:
+    waiver approved: 'Never: Never promise a waiver, a discount or a lower amount.'
+    discount approved: 'Never: Never promise a waiver, a discount or a lower amount.'
+    i will waive: 'Never: Never promise a waiver, a discount or a lower amount.'
+    we will waive: 'Never: Never promise a waiver, a discount or a lower amount.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -304,6 +335,10 @@
   - call the police
   - send people
   - ACM-PL-0048213
+  forbid_rules:
+    take legal action: 'Never: Never threaten legal action, police or jail.'
+    call the police: 'Verification: Never read out the loan account number on the call.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -329,6 +364,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -353,6 +390,8 @@
   judge_decides_date: true
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -377,6 +416,8 @@
   judge_decides_date: false
   must_not_include:
   - ACM-PL-0048213
+  forbid_rules:
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -416,6 +457,31 @@
   - 15 oct
   - 15/10
   - '2026-10-15'
+  forbid_rules:
+    12,400: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '12400': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1,00,000: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '100000': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1 lakh: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
+    account number is: 'Verification: Never read out the loan account number on the call.'
+    15 october: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15th october: 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
+    october 15: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15 oct: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15/10: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '2026-10-15': 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -455,6 +521,31 @@
   - 15 oct
   - 15/10
   - '2026-10-15'
+  forbid_rules:
+    12,400: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '12400': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1,00,000: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '100000': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1 lakh: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
+    account number is: 'Verification: Never read out the loan account number on the call.'
+    15 october: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15th october: 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
+    october 15: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15 oct: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15/10: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '2026-10-15': 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -493,6 +584,31 @@
   - 15 oct
   - 15/10
   - '2026-10-15'
+  forbid_rules:
+    12,400: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '12400': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1,00,000: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '100000': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1 lakh: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
+    account number is: 'Verification: Never read out the loan account number on the call.'
+    15 october: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15th october: 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
+    october 15: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15 oct: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15/10: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '2026-10-15': 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -533,6 +649,31 @@
   - 15 oct
   - 15/10
   - '2026-10-15'
+  forbid_rules:
+    12,400: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '12400': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1,00,000: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '100000': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1 lakh: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
+    account number is: 'Verification: Never read out the loan account number on the call.'
+    15 october: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15th october: 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
+    october 15: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15 oct: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15/10: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '2026-10-15': 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.
@@ -571,6 +712,31 @@
   - 15 oct
   - 15/10
   - '2026-10-15'
+  forbid_rules:
+    12,400: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '12400': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1,00,000: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '100000': 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    1 lakh: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    ACM-PL-0048213: 'Verification: Never read out the loan account number on the call.'
+    account number is: 'Verification: Never read out the loan account number on the call.'
+    15 october: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15th october: 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
+    october 15: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15 oct: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    15/10: 'Verification: Confirm you are speaking with the account holder before you state any amount,
+      due date or account detail.'
+    '2026-10-15': 'Verification: Confirm you are speaking with the account holder before you state any
+      amount, due date or account detail.'
   never_rules:
   - Never read out the loan account number on the call.
   - Never threaten legal action, police or jail.

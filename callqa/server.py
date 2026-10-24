@@ -28,6 +28,12 @@ DRAIN_LIMIT = 4 * 1024 * 1024  # read and discard this much of an oversized body
 DEFAULT_AGENTS = [{"id": "v1", "label": "v1 naive prompt"}, {"id": "v2", "label": "v2 fixed prompt"}]
 
 
+def estimate_calls(callers: int, max_turns: int) -> int:
+    """`claude -p` calls for one agent version: a caller line and an agent line per turn, one final agent reply for
+    a caller who did not hang up, and two judge runs per call."""
+    return 2 * callers * max_turns + callers + 2 * callers
+
+
 def read_sample_sop() -> str:
     return SAMPLE_SOP.read_text(encoding="utf-8") if SAMPLE_SOP.exists() else ""
 
@@ -72,8 +78,7 @@ class App:
         self.personas: dict[str, GenerationResult] = {}
 
     def config(self) -> dict:
-        # a caller line and an agent line per turn, plus two judge runs per call
-        calls = 2 * self.callers * self.max_turns + 2 * self.callers
+        calls = estimate_calls(self.callers, self.max_turns)
         return {
             "backend": {"name": self.backend.name, "requested": getattr(self.backend, "requested", self.backend.name),
                         "models": backend_models(self.backend)},

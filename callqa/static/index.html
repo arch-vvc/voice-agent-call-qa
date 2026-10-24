@@ -99,7 +99,9 @@
   .chip.lang { background: #efe9fb; color: #5b34a8; }
   .call-reason { flex-basis: 100%; font-size: 14px; color: var(--fail); }
   .call-rule { flex-basis: 100%; font-size: 13px; color: var(--muted); }
-  .note { flex-basis: 100%; font-size: 13px; color: #8a93a3; }  /* judge style notes: grey, never a failure */
+  .note { flex-basis: 100%; font-size: 13px; color: #8a93a3; cursor: pointer;  /* judge note: grey, never a failure */
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .note.expanded { display: block; -webkit-line-clamp: unset; }  /* a click shows the whole note */
   .chip.flaky { background: #fff1d0; color: #8a5a00; font-weight: 700; }  /* the two judge runs disagreed */
   #flaky-note { margin-top: 4px; font-size: 14px; font-weight: 600; color: #8a5a00; }
   .transcript { padding: 4px 14px 14px; }
@@ -447,7 +449,16 @@
       var turnText = call.failing_turn === null ? '' : ' (Turn ' + (call.failing_turn + 1) + ')';
       summary.appendChild(el('div', 'call-reason', call.reason + turnText));
     }
-    if (call.notes) { summary.appendChild(el('div', 'note', 'Note: ' + call.notes)); }
+    if (call.notes) {  // clamped to two lines; clicking it shows the full text and does not toggle the card
+      var note = el('div', 'note', 'Note: ' + call.notes);
+      note.title = call.notes;
+      note.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        note.classList.toggle('expanded');
+      });
+      summary.appendChild(note);
+    }
     summary.appendChild(el('div', 'call-rule', 'SOP: ' + call.sop_rule));
     card.appendChild(summary);
 

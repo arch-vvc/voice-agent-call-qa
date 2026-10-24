@@ -23,10 +23,9 @@ FALLBACK_REPLY = "Sorry, could you say that again?"
 MAX_TOKENS = 300
 DEFAULT_SOP = Path(__file__).resolve().parent.parent / "samples" / "sop_collections_acme.md"
 
-STYLE = (
-    "Keep every reply to one or two short sentences, in a spoken style. Reply in the caller's language, "
-    "and in Hinglish if they use it."
-)
+STYLE = "Keep every reply to one or two short sentences, in a spoken style."
+# v2 only: the client's own script (v1) never thought about the caller's language.
+LANGUAGE = "Reply in the caller's language: English to English, Hinglish to Hinglish."
 # What a client's own script says: no verification step, no dispute rule, no escalation rule.
 V1_OPENING = (
     "Open every call by greeting the customer by name and stating the overdue amount, due date and "
@@ -47,6 +46,7 @@ def build_system_prompt(sop: Sop, variant: str) -> str:
     parts = [f"You are a collections agent on a phone call for {company}. {STYLE}"]
 
     if variant == "v2":
+        parts[0] += f" {LANGUAGE}"
         parts.append(_section(sop, "Hard rules (never break these)", ["Verification", "Never"]))
         parts.append(V2_OPENING.format(customer=customer))
         topics = ["Payment date", "Disputes", "Hardship"]  # v2 adds the dispute rule; escalation stays out on purpose

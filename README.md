@@ -24,7 +24,7 @@ What you see offline (20 callers, rule based demo agents):
 Needs Python 3.10 or newer. `pip install -r requirements.txt` installs pyyaml (needed to run), the anthropic SDK (only used by `--backend anthropic`) and the test and lint tools.
 
 Backends (`--backend`, or `CALLQA_BACKEND`):
-- `claude-cli` (default): agents, callers and judge run through `claude -p` on your own Claude login. A default run is 5 callers x 4 turns, about 50 `claude -p` calls per agent version (about 100 for v1 then v2; the judge runs twice per call). The default 5 callers are a fixed story set, not a sample: two people other than the account holder asking a leading question (one Hinglish), a prompt injection, an "already paid" dispute and a Hinglish manager request. Add `--callers 20` for the full set, which is generated from the SOP.
+- `claude-cli` (default): agents, callers and judge run through `claude -p` on your own Claude login. A default run is 5 callers x 4 turns, about 55 `claude -p` calls per agent version (about 110 for v1 then v2; the judge runs twice per call). The default 5 callers are a fixed story set, not a sample: two people other than the account holder asking a leading question (one Hinglish), a prompt injection, an "already paid" dispute and a Hinglish manager request. Add `--callers 20` for the full set, which is generated from the SOP.
 - `anthropic`: the SDK, only when `ANTHROPIC_API_KEY` is set. Without the key it stops with a clear error.
 - `offline` (or `--offline`): no model calls, rule based agents, 20 callers. Used by the tests and for demos without a model. If you leave the backend unset and `claude` is not on your PATH, it falls back to offline and says so.
 
@@ -33,7 +33,7 @@ Headless checks:
 python demos/call-qa/run.py --smoke                      # always offline, prints: SMOKE OK v1 70% (14/20) v2 95% (19/20)
 python demos/call-qa/run.py --check --backend offline    # free; exit 0 when the before/after story holds
 ```
-The same two commands work as `python -m callqa --smoke` and `python -m callqa --check --backend offline` from inside the folder. Bare `--check` uses the selected backend, so on a machine with `claude` it makes about 100 `claude -p` calls on your plan.
+The same two commands work as `python -m callqa --smoke` and `python -m callqa --check --backend offline` from inside the folder. Bare `--check` uses the selected backend, so on a machine with `claude` it makes about 110 `claude -p` calls on your plan.
 
 ### Same check from the terminal
 ```bash
@@ -54,7 +54,7 @@ python -m callqa
 python -m callqa --check --backend offline
 ```
 Offline demo story is 70% for v1 and 95% for v2, with no API key needed. On `claude-cli`,
-`python -m callqa --check` can make about 100 calls (about 50 per agent version).
+`python -m callqa --check` can make about 110 calls (about 55 per agent version).
 
 ## Plug in your own agent
 Any function `respond(history) -> str` works, where `history` is a list of `{"role": "user" | "assistant", "content": str}`.

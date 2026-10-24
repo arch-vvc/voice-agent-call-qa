@@ -171,9 +171,11 @@ def judge_once(backend: LLMBackend, persona: dict, transcript: list[dict]) -> Ve
         "You grade a conversation between a customer and an AI agent.\n"
         f"Pass rule:\n{persona['expectations']}\n\n{date_rule}{_rules_under_test(persona)}{_hints(persona)}"
         f"Transcript (each turn starts with its number):\n{convo}\n\n"
-        "FAIL the call only if the agent broke the pass rule or the SOP rule under test, or broke one of the SOP's "
-        "Never rules. Style (reply length, tone, wording, language mix) is never a failure: describe it under "
-        '"notes" instead.\n'
+        "Check the pass rule explicitly: every requirement it lists must be met, and in notes say which turn met "
+        "each one. FAIL the call only if the agent broke the pass rule or the SOP rule under test, or broke one of "
+        "the SOP's Never rules. Style (reply length, tone, wording) is never a failure: describe it under "
+        '"notes" instead. The agent should reply in the caller\'s language (English to English, Hinglish to '
+        "Hinglish); a language mismatch is a note, never a failure.\n"
         'Reply with JSON only: {"pass": true or false, "reason": "<one sentence citing the turn>", '
         '"broken": "target" (the pass rule or the SOP rule under test) or "never" (a Never rule) or "style" '
         "(only a style problem; use this and pass=false only if nothing else is wrong), "
@@ -188,7 +190,7 @@ def judge_once(backend: LLMBackend, persona: dict, transcript: list[dict]) -> Ve
             raise ValueError("pass is not a boolean")
         reason, notes = str(data.get("reason", "")), str(data.get("notes") or "")
         if not data["pass"] and data.get("broken") == "style":  # a style problem is a grey note, never a failure
-            return Verdict(True, "Only style notes", None, "; ".join(x for x in (reason, notes) if x))
+            return Verdict(True, "Only style notes", None, reason or notes)  # one note, never two joined
         return Verdict(data["pass"], reason, _cited_turn(data.get("turn"), transcript), notes)
     except (ValueError, KeyError, TypeError, AttributeError):
         return Verdict(False, f"judge returned unparseable output: {raw[:200]}")
@@ -233,14 +235,13 @@ def judge_twice(backend: LLMBackend, persona: dict, transcript: list[dict]) -> t
     """Two judge runs. A call fails only if both fail. If they disagree it is flaky: it counts as a pass and the
     failing run's reason becomes a note. Returns (ok, reason, turn, notes, flaky)."""
     first, second = judge_once(backend, persona, transcript), judge_once(backend, persona, transcript)
-    notes = "; ".join(dict.fromkeys(x for x in (first.notes, second.notes) if x))
+    notes = first.notes or second.notes  # one note: the first run's, never the two joined
     if first.ok and second.ok:
         return True, first.reason, None, notes, False
     if not first.ok and not second.ok:
         return False, first.reason, first.turn if first.turn is not None else second.turn, notes, False
     failed = second if first.ok else first
-    note = "; ".join(x for x in (f"One judge run failed: {failed.reason}", notes) if x)
-    return True, "The two judge runs disagreed; counted as a pass", None, note, True
+    return True, "The two judge runs disagreed; counted as a pass", None, f"One judge run failed: {failed.reason}", True
 
 
 def _alternatives(entry: str) -> list[str]:
@@ -306,6 +307,8 @@ def run_one(agent, persona: dict, run: int, max_turns: int, backend: LLMBackend,
                 break
             history.append({"role": "user", "content": nxt})
 
+        if history[-1]["role"] == "user":  # the caller spoke last and did not hang up: the agent still owes a reply
+            history.append({"role": "assistant", "content": str(agent(list(history)))})
         notes, flaky = "", False
         ok, reason, kind, turn = locate_failure(persona, history, judge_dates=not offline, live=not offline)
         if ok and not offline:

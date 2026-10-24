@@ -141,17 +141,17 @@ def test_config_reports_backend_models_warnings_and_estimated_calls(start):
     assert cfg["backend"]["name"] == "claude-cli" and cfg["backend"]["requested"] == "claude-cli"
     assert set(cfg["backend"]["models"]) == {"caller", "agent", "judge", "gen"}
     assert cfg["warnings"] == ["something to know"]
-    assert (cfg["callers"], cfg["max_turns"], cfg["estimated_calls"]) == (5, 4, 50)
+    assert (cfg["callers"], cfg["max_turns"], cfg["estimated_calls"]) == (5, 4, 55)
     assert cfg["agents"] == DEFAULT_AGENTS
     assert "₹12,400" in cfg["sample_sop"]
     assert cfg["agent_kind"] == "llm"
 
 
-def test_estimated_calls_is_2ct_plus_2c(start):
+def test_estimated_calls_is_2ct_plus_3c(start):
     base, _ = start(callers=5, max_turns=4)
-    assert get_json(base, "/api/config")[1]["estimated_calls"] == 50  # 2*5*4 + 2*5: two judge runs
+    assert get_json(base, "/api/config")[1]["estimated_calls"] == 55  # 2*5*4 + 5 final replies + 2*5 judge runs
     base2, _ = start(callers=20, max_turns=8)
-    assert get_json(base2, "/api/config")[1]["estimated_calls"] == 360
+    assert get_json(base2, "/api/config")[1]["estimated_calls"] == 380
 
 
 def test_post_run_returns_run_id_then_poll_returns_report(start):
