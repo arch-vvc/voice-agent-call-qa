@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 PRODUCT = Path(__file__).resolve().parents[1]
-REPO = PRODUCT.parents[1] if PRODUCT.parent.name == "demos" else PRODUCT  # monorepo root, or the repo itself once exported
+# The monorepo root, or the repo itself once this demo is exported on its own.
+REPO = PRODUCT.parents[1] if PRODUCT.parent.name == "demos" else PRODUCT
 SCRIPT = PRODUCT / "evals" / "run_evals.py"
 
 
