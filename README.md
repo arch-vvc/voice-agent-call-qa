@@ -8,12 +8,12 @@ Paste a client's SOP. Simulated callers (happy path, confused, mind changers, Hi
 
 ## Run it in 60 seconds
 ```bash
-git clone https://github.com/arch-vvc/lets-fucking-get-a-fde-job-and-make-money.git
-cd lets-fucking-get-a-fde-job-and-make-money
+git clone <PASTE-REPO-URL-HERE>
+cd <repo-folder>
 pip install -r requirements.txt
-python demos/call-qa/run.py
+python run.py
 ```
-Or from inside the folder: `cd demos/call-qa && python -m callqa`. Both do the same thing and work from any directory.
+Or from inside the folder: `cd . && python -m callqa`. Both do the same thing and work from any directory.
 
 Your browser opens with a synthetic collections SOP for Acme Finance already pasted. There is no API key needed.
 
@@ -30,15 +30,15 @@ Backends (`--backend`, or `CALLQA_BACKEND`):
 
 Headless checks:
 ```bash
-python demos/call-qa/run.py --smoke                      # always offline, prints: SMOKE OK v1 70% (14/20) v2 95% (19/20)
-python demos/call-qa/run.py --check --backend offline    # free; exit 0 when the before/after story holds
+python run.py --smoke                      # always offline, prints: SMOKE OK v1 70% (14/20) v2 95% (19/20)
+python run.py --check --backend offline    # free; exit 0 when the before/after story holds
 ```
 The same two commands work as `python -m callqa --smoke` and `python -m callqa --check --backend offline` from inside the folder. Bare `--check` uses the selected backend, so on a machine with `claude` it makes about 110 `claude -p` calls on your plan.
 
 ### Same check from the terminal
 ```bash
-python demos/call-qa/evals/run_evals.py --agent evals.example_agent:respond --offline --runs 2
-python demos/call-qa/evals/run_evals.py --agent evals.example_agent:respond --offline --runs 2 --personas demos/call-qa/evals/personas_acme.yaml
+python evals/run_evals.py --agent evals.example_agent:respond --offline --runs 2
+python evals/run_evals.py --agent evals.example_agent:respond --offline --runs 2 --personas evals/personas_acme.yaml
 ```
 The first command runs four personas and shows one failure: the example collections agent reads out the amount owed to an unverified caller. That is the kind of bug this tool exists to catch.
 
@@ -46,7 +46,7 @@ Exit code 1 is expected here: the planted failure pulls the pass rate (75%) belo
 
 Leave out `--offline` and pick `--backend claude-cli` or `--backend anthropic` to swap the scripted callers and phrase rules for an LLM caller and an LLM judge.
 
-The command works from any directory. Personas and results live next to the script in `demos/call-qa/evals/` (results are git ignored), and the sample SOP is in `demos/call-qa/samples/`.
+The command works from any directory. Personas and results live next to the script in `evals/` (results are git ignored), and the sample SOP is in `samples/`.
 
 Dashboard commands:
 ```bash
@@ -59,13 +59,13 @@ Offline demo story is 70% for v1 and 95% for v2, with no API key needed. On `cla
 ## Plug in your own agent
 Any function `respond(history) -> str` works, where `history` is a list of `{"role": "user" | "assistant", "content": str}`.
 ```bash
-python demos/call-qa/evals/run_evals.py --agent your_package.agent:respond --runs 3 --threshold 0.85
+python evals/run_evals.py --agent your_package.agent:respond --runs 3 --threshold 0.85
 ```
-Personas live in `demos/call-qa/evals/personas.yaml`. Each one has a pass rule a stranger could apply, plus phrases the agent must or must never say. For the dashboard, `--agent id=label=module:function` adds your own agent to the picker.
+Personas live in `evals/personas.yaml`. Each one has a pass rule a stranger could apply, plus phrases the agent must or must never say. For the dashboard, `--agent id=label=module:function` adds your own agent to the picker.
 
 ## Tests
 ```bash
-python -m pytest -q demos/call-qa/tests      # from the repo root
+python -m pytest -q tests      # from the repo root
 ```
 `python -m pytest -q` at the repo root runs every product's tests. No test starts the real `claude` CLI or touches the network.
 
@@ -75,5 +75,5 @@ callqa/      dashboard server, SOP reader, persona generator, report builder, st
 evals/       harness (run_evals.py), backends, example agents, personas
 samples/     the synthetic Acme Finance collections SOP
 tests/       the tests, with fixtures
-run.py       thin entry point: python demos/call-qa/run.py
+run.py       thin entry point: python run.py
 ```

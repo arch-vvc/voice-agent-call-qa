@@ -134,7 +134,7 @@ def test_docs_describe_the_command():
         assert needle in readme
     claude_md = REPO_CLAUDE_MD.read_text(encoding="utf-8") if REPO_CLAUDE_MD else ""
     if REPO_CLAUDE_MD:
-        assert "Call QA dashboard: `python demos/call-qa/run.py`" in claude_md
+        assert "Call QA dashboard: `python run.py`" in claude_md
         assert "Call QA dashboard: not built yet" not in claude_md
     assert "drop `--offline`" not in readme + claude_md
 
