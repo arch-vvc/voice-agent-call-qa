@@ -8,8 +8,8 @@ Paste a client's SOP. Simulated callers (happy path, confused, mind changers, Hi
 
 ## Run it in 60 seconds
 ```bash
-git clone <PASTE-REPO-URL-HERE>
-cd <repo-folder>
+git clone https://github.com/arch-vvc/voice-agent-call-qa.git
+cd voice-agent-call-qa
 pip install -r requirements.txt
 python run.py
 ```
