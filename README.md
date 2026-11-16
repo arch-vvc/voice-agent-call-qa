@@ -13,7 +13,7 @@ cd voice-agent-call-qa
 pip install -r requirements.txt
 python run.py
 ```
-Or from inside the folder: `cd . && python -m callqa`. Both do the same thing and work from any directory.
+Or run `python -m callqa`. Both do the same thing.
 
 Your browser opens with a synthetic collections SOP for Acme Finance already pasted. There is no API key needed.
 
