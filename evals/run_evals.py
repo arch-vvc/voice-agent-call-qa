@@ -74,9 +74,13 @@ class RunResult:
     transcript: list[dict] = field(default_factory=list)
     seconds: float = 0.0
     failing_turn: int | None = None  # 0 based index into transcript, None when passed or not pinned to a turn
-    failure_kind: str | None = None  # "forbidden" | "missing" | "judge" | "crash", None when passed
+    failure_kind: str | None = None  # "forbidden" | "missing" | "judge" | "crash" | "needs_review", None when passed
     notes: str = ""  # style observations from the judge (reply length, tone): shown in grey, never a failure
-    flaky: bool = False  # the two judge runs disagreed: counted as a pass and flagged amber
+    needs_review: bool = False  # the two judge runs disagreed: not a pass, not a failure, flagged amber
+
+    @property
+    def flaky(self) -> bool:  # old name for needs_review
+        return self.needs_review
 
 
 @dataclass
@@ -232,8 +236,9 @@ def _cited_turn(value, transcript: list[dict]) -> int | None:
 
 
 def judge_twice(backend: LLMBackend, persona: dict, transcript: list[dict]) -> tuple[bool, str, int | None, str, bool]:
-    """Two judge runs. A call fails only if both fail. If they disagree it is flaky: it counts as a pass and the
-    failing run's reason becomes a note. Returns (ok, reason, turn, notes, flaky)."""
+    """Two judge runs. Both pass: pass. Both fail: fail. If they disagree the call needs review: it is not a pass,
+    not a failure and has no failing turn; the failing run's reason becomes a note.
+    Returns (ok, reason, turn, notes, needs_review)."""
     first, second = judge_once(backend, persona, transcript), judge_once(backend, persona, transcript)
     notes = first.notes or second.notes  # one note: the first run's, never the two joined
     if first.ok and second.ok:
@@ -241,7 +246,7 @@ def judge_twice(backend: LLMBackend, persona: dict, transcript: list[dict]) -> t
     if not first.ok and not second.ok:
         return False, first.reason, first.turn if first.turn is not None else second.turn, notes, False
     failed = second if first.ok else first
-    return True, "The two judge runs disagreed; counted as a pass", None, f"One judge run failed: {failed.reason}", True
+    return False, "The two judge runs disagreed", None, f"One judge run failed: {failed.reason}", True
 
 
 def _alternatives(entry: str) -> list[str]:
@@ -309,12 +314,12 @@ def run_one(agent, persona: dict, run: int, max_turns: int, backend: LLMBackend,
 
         if history[-1]["role"] == "user":  # the caller spoke last and did not hang up: the agent still owes a reply
             history.append({"role": "assistant", "content": str(agent(list(history)))})
-        notes, flaky = "", False
+        notes, review = "", False
         ok, reason, kind, turn = locate_failure(persona, history, judge_dates=not offline, live=not offline)
         if ok and not offline:
-            ok, reason, turn, notes, flaky = judge_twice(backend, persona, history)
-            kind = None if ok else "judge"
-            if not ok and turn is None:  # no cited agent turn: point at the last agent turn
+            ok, reason, turn, notes, review = judge_twice(backend, persona, history)
+            kind = "needs_review" if review else None if ok else "judge"
+            if not ok and not review and turn is None:  # no cited agent turn: point at the last agent turn
                 turn = next((i for i in range(len(history) - 1, -1, -1) if history[i]["role"] == "assistant"), None)
     except BackendError as exc:
         if exc.kind in ABORT_KINDS:
@@ -322,7 +327,7 @@ def run_one(agent, persona: dict, run: int, max_turns: int, backend: LLMBackend,
         return crashed(f"backend {exc.kind}: {exc}")
     except Exception as exc:  # the agent crashing is a failed run, not a crashed harness
         return crashed(f"agent raised {type(exc).__name__}: {exc}")
-    return RunResult(persona["id"], run, ok, reason, history, round(time.time() - start, 2), turn, kind, notes, flaky)
+    return RunResult(persona["id"], run, ok, reason, history, round(time.time() - start, 2), turn, kind, notes, review)
 
 
 def run_suite(agent, personas: list[dict], runs: int, max_turns: int, workers: int, backend: LLMBackend, seed: int,
@@ -401,10 +406,13 @@ def main(argv: list[str] | None = None) -> int:
     for pp in personas:
         rs = [r for r in results if r.persona == pp["id"]]
         rate = sum(r.passed for r in rs) / len(rs)
-        fails = "; ".join(sorted({r.reason for r in rs if not r.passed}))[:110]
+        fails = "; ".join(sorted({r.reason for r in rs if not r.passed and not r.needs_review}))[:110]
         print(f"{pp['id']:<24}{rate:>9.0%}   {fails}")
     overall = sum(r.passed for r in results) / len(results)
+    n_review = sum(r.needs_review for r in results)
+    n_failed = len(results) - sum(r.passed for r in results) - n_review
     print(f"\nOVERALL {overall:.0%} over {len(results)} conversations (threshold {args.threshold:.0%})")
+    print(f"passed {sum(r.passed for r in results)}, failed {n_failed}, needs review {n_review}")
 
     out_dir = HERE / "results"
     out_dir.mkdir(parents=True, exist_ok=True)

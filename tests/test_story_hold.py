@@ -191,19 +191,20 @@ def test_the_judge_runs_twice_per_call():
 
 def test_a_call_fails_only_when_both_judge_runs_fail():
     result = judged(FakeBackend(judge_replies=[FAIL, FAIL]))
-    assert (result.passed, result.failure_kind, result.flaky) == (False, "judge", False)
+    assert (result.passed, result.failure_kind, result.needs_review) == (False, "judge", False)
 
 
 @pytest.mark.parametrize("replies", [[PASS, FAIL], [FAIL, PASS]])
-def test_when_the_judge_runs_disagree_the_call_is_flaky_and_counts_as_a_pass(replies):
+def test_when_the_judge_runs_disagree_the_call_needs_review_and_is_not_a_pass(replies):
     result = judged(FakeBackend(judge_replies=replies))
-    assert (result.passed, result.failure_kind, result.flaky) == (True, None, True)
+    assert (result.passed, result.failure_kind, result.needs_review) == (False, "needs_review", True)
+    assert result.failing_turn is None
     assert "No callback offered" in result.notes  # the failing run's reason is kept as a note
 
 
 def test_two_passes_are_a_plain_pass():
     result = judged(FakeBackend(judge_replies=[PASS, PASS]))
-    assert (result.passed, result.flaky) == (True, False)
+    assert (result.passed, result.needs_review) == (True, False)
 
 
 def test_a_forbidden_phrase_still_fails_without_asking_the_judge():
@@ -214,17 +215,18 @@ def test_a_forbidden_phrase_still_fails_without_asking_the_judge():
     assert backend.judge_calls() == []
 
 
-def test_the_report_carries_notes_flaky_and_a_flaky_count():
+def test_the_report_carries_notes_needs_review_and_a_count():
     transcript = turns((CUSTOMER, "a"), (AGENT, "b"))
-    flaky = RunResult("p1", 0, True, "judge runs disagreed", transcript, 0.1, None, None,
-                      notes="No callback offered", flaky=True)
+    flaky = RunResult("p1", 0, False, "judge runs disagreed", transcript, 0.1, None, "needs_review",
+                      notes="No callback offered", needs_review=True)
     plain = RunResult("p2", 0, True, "ok", transcript, 0.1)
     p1 = {**persona(), "name": "P1", "language": "en", "tags": [], "fix_hint": "x"}
     p2 = {**persona(id="p2"), "name": "P2", "language": "en", "tags": [], "fix_hint": "x"}
     calls = [report.build_call(p1, flaky), report.build_call(p2, plain)]
-    assert calls[0]["flaky"] is True and calls[0]["notes"] == "No callback offered"
-    assert calls[1]["flaky"] is False and calls[1]["notes"] == ""
-    assert report.count_flaky(calls) == 1
+    assert calls[0]["needs_review"] is True and calls[0]["flaky"] is True
+    assert calls[0]["notes"] == "No callback offered"
+    assert calls[1]["needs_review"] is False and calls[1]["notes"] == ""
+    assert report.count_needs_review(calls) == 1
 
 
 # ---- 5. rules come only from rule statements ----

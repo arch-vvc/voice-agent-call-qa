@@ -105,7 +105,7 @@ def test_report_fixture_matches_contract():
     report = _load("report_example.json")
     assert set(report) == {
         "run_id", "sop_hash", "agent", "backend", "callers", "max_turns", "warnings", "generator",
-        "pass_rate", "passed", "flaky", "total", "seconds", "calls", "next_fixes",
+        "pass_rate", "passed", "needs_review", "flaky", "total", "seconds", "calls", "next_fixes",
     }
     assert isinstance(report["run_id"], str) and isinstance(report["sop_hash"], str)
     assert set(report["agent"]) == {"id", "label"}
@@ -119,7 +119,7 @@ def test_report_fixture_matches_contract():
 
     call_keys = {
         "persona_id", "name", "language", "tags", "passed", "reason", "failure_kind", "failing_turn",
-        "sop_rule", "fix_hint", "notes", "flaky", "transcript",
+        "sop_rule", "fix_hint", "notes", "needs_review", "flaky", "transcript",
     }
     calls = report["calls"]
     assert len(calls) == report["total"] == report["callers"] == 20
