@@ -110,10 +110,10 @@ def test_the_second_runs_note_is_used_only_when_the_first_has_none():
     assert judged(FakeBackend(judge_replies=[PASS, noted("Tone was formal.")])).notes == "Tone was formal."
 
 
-def test_a_flaky_call_shows_one_note_about_the_failing_run():
+def test_a_needs_review_call_shows_one_note_about_the_failing_run():
     fail = json.dumps({"pass": False, "reason": "No callback offered", "broken": "target", "turn": 2})
     result = judged(FakeBackend(judge_replies=[noted("Reply was long."), fail]))
-    assert result.flaky and result.passed
+    assert result.needs_review and not result.passed
     assert result.notes == "One judge run failed: No callback offered" and "; " not in result.notes
 
 

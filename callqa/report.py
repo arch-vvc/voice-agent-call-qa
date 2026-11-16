@@ -35,6 +35,9 @@ def broken_rule(persona: dict, result) -> str:
     return persona["sop_rule"]
 
 
+NO_TURN_KINDS = ("crash", "needs_review")  # these are never pinned to a failing turn
+
+
 def build_call(persona: dict, result) -> dict:
     judged = result.failure_kind == "judge" and bool(result.reason.strip())
     return {
@@ -45,11 +48,12 @@ def build_call(persona: dict, result) -> dict:
         "passed": result.passed,
         "reason": result.reason,
         "failure_kind": result.failure_kind,
-        "failing_turn": None if result.passed or result.failure_kind == "crash" else result.failing_turn,
+        "failing_turn": None if result.passed or result.failure_kind in NO_TURN_KINDS else result.failing_turn,
         "sop_rule": broken_rule(persona, result),
         "fix_hint": result.reason if judged else persona["fix_hint"],
         "notes": result.notes,
-        "flaky": result.flaky,
+        "needs_review": result.needs_review,
+        "flaky": result.needs_review,  # old name, kept so old readers still work
         "transcript": [{"role": m["role"], "content": m["content"]} for m in result.transcript],
     }
 
@@ -67,7 +71,7 @@ def group_next_fixes(calls: list[dict]) -> list[dict]:
     """Failed calls grouped by the SOP rule they broke: biggest group first, then by rule text."""
     groups: dict[str, list[dict]] = {}
     for call in calls:
-        if not call["passed"]:
+        if not call["passed"] and not is_needs_review(call):
             groups.setdefault(call["sop_rule"], []).append(call)
     fixes = [
         {
@@ -82,9 +86,19 @@ def group_next_fixes(calls: list[dict]) -> list[dict]:
     return sorted(fixes, key=lambda fix: (-fix["count"], fix["sop_rule"]))
 
 
-def count_flaky(calls: list[dict]) -> int:
-    """Calls where the two judge runs disagreed. They count as passes in the headline."""
-    return sum(1 for c in calls if c.get("flaky"))
+def is_needs_review(call: dict) -> bool:
+    """The two judge runs disagreed. Old result files only have `flaky`, which means the same."""
+    return bool(call.get("needs_review", call.get("flaky")))
+
+
+def count_needs_review(calls: list[dict]) -> int:
+    """Calls where the two judge runs disagreed. They are not passes and not failures."""
+    return sum(1 for c in calls if is_needs_review(c))
+
+
+def needs_review_count(report: dict) -> int:
+    """`needs_review` from a report dict; an old file with only `flaky` gives the same number."""
+    return int(report.get("needs_review", report.get("flaky", 0)) or 0)
 
 
 def crash_warnings(calls: list[dict]) -> list[str]:
@@ -111,7 +125,8 @@ def build_report(*, run_id: str, sop_text: str, agent: dict, backend, callers: i
         "generator": {"source": generation.source, "warnings": list(generation.warnings)},
         "pass_rate": round(passed / total, 4) if total else 0.0,
         "passed": passed,
-        "flaky": count_flaky(calls),
+        "needs_review": (review := count_needs_review(calls)),
+        "flaky": review,  # alias of needs_review so old readers still load
         "total": total,
         "seconds": round(seconds, 2),
         "calls": calls,

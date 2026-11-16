@@ -3,8 +3,9 @@
     python run.py                              serve the dashboard on http://127.0.0.1:8000
     python run.py --smoke                      offline self check, prints SMOKE OK ...
     python run.py --check --backend offline    before and after run, exits 1 if the fix does not help
+    python run.py --summarise results/live     table of the live runs saved in that folder
 
-Same as `python -m callqa` from inside .. Every option is listed by --help.
+Same as `python -m callqa`. Every option is listed by --help.
 """
 import sys
 from pathlib import Path

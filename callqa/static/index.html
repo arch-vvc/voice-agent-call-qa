@@ -102,6 +102,9 @@
   .note { flex-basis: 100%; font-size: 13px; color: #8a93a3; cursor: pointer;  /* judge note: grey, never a failure */
           display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .note.expanded { display: block; -webkit-line-clamp: unset; }  /* a click shows the whole note */
+  .call.review { border-left-color: #c98a00; }
+  .call.review .verdict { background: #fff1d0; color: #8a5a00; }
+  .call.review .call-reason { color: #8a5a00; }
   .chip.flaky { background: #fff1d0; color: #8a5a00; font-weight: 700; }  /* the two judge runs disagreed */
   #flaky-note { margin-top: 4px; font-size: 14px; font-weight: 600; color: #8a5a00; }
   .transcript { padding: 4px 14px 14px; }
@@ -340,9 +343,10 @@
     $('pass-summary').textContent = report.passed + ' of ' + report.total + ' calls follow the SOP';
     $('run-meta').textContent = report.agent.label + ', ' + report.backend.name + ' backend, '
       + report.seconds + ' s';
-    var flaky = $('flaky-note');  // calls where the two judge runs disagreed: counted as passes, shown amber
-    flaky.hidden = !report.flaky;
-    flaky.textContent = report.flaky ? report.flaky + ' flaky (the judge runs disagreed; counted as a pass)' : '';
+    var review = $('flaky-note');  // calls where the two judge runs disagreed: not passes, shown amber
+    var reviewCount = report.needs_review !== undefined ? report.needs_review : (report.flaky || 0);
+    review.hidden = !reviewCount;
+    review.textContent = reviewCount ? reviewCount + ' need review (the two judge runs disagreed)' : '';
     renderNextFix(report);
     renderCalls(report);
   }
@@ -436,14 +440,15 @@
   }
 
   function buildCard(call) {
-    var card = el('details', call.passed ? 'call' : 'call failed');
+    var inReview = call.needs_review !== undefined ? call.needs_review : !!call.flaky;
+    var card = el('details', call.passed ? 'call' : (inReview ? 'call review' : 'call failed'));
     card.id = 'call-' + call.persona_id;
 
     var summary = el('summary');
-    summary.appendChild(el('span', 'verdict', call.passed ? 'PASS' : 'FAIL'));
+    summary.appendChild(el('span', 'verdict', call.passed ? 'PASS' : (inReview ? 'REVIEW' : 'FAIL')));
     summary.appendChild(el('span', 'call-name', call.name));
     summary.appendChild(el('span', 'chip lang', call.language === 'hinglish' ? 'Hinglish' : 'English'));
-    if (call.flaky) { summary.appendChild(el('span', 'chip flaky', 'flaky')); }
+    if (inReview) { summary.appendChild(el('span', 'chip flaky', 'needs review')); }
     (call.tags || []).forEach(function (tag) { summary.appendChild(el('span', 'chip', tag)); });
     if (!call.passed) {
       var turnText = call.failing_turn === null ? '' : ' (Turn ' + (call.failing_turn + 1) + ')';
@@ -465,7 +470,7 @@
     var phrase = forbiddenPhrase(call);
     var transcript = el('div', 'transcript');
     call.transcript.forEach(function (turn, index) {
-      var failing = !call.passed && index === call.failing_turn;
+      var failing = !call.passed && !inReview && index === call.failing_turn;
       var row = el('div', 'turn ' + turn.role + (failing ? ' failing' : ''));
       var speaker = turn.role === 'assistant' ? 'Agent' : 'Caller';
       row.appendChild(el('div', 'who', 'Turn ' + (index + 1) + ' ' + speaker));

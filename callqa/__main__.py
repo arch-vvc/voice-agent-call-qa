@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from callqa.personas import generate_personas
 from callqa.server import DEFAULT_AGENTS, build_agent_for, make_server, read_sample_sop, run_check
+from callqa.summarise import summarise
 from evals.backends import BACKEND_NAMES, BackendError, get_backend
 from evals.run_evals import RUN_DEFAULTS, RunAborted, run_suite
 
@@ -43,6 +44,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="offline, 20 callers, v1 then v2, print SMOKE OK or what differs (ignores env)")
     p.add_argument("--check", action="store_true",
                    help="run v1 then v2 on the selected backend and gate the before/after (exit 0 or 1)")
+    p.add_argument("--summarise", metavar="FOLDER",
+                   help="print a Markdown table of the live runs saved in FOLDER (for example results/live), then exit")
     p.add_argument("--agent", action="append", default=[], metavar="ID=LABEL=MODULE:FUNCTION",
                    help="add or replace a dashboard agent with your own respond(history) function; repeatable")
     args = p.parse_args(argv)
@@ -160,6 +163,9 @@ def serve(cfg: Config, args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.summarise:
+        print(summarise(args.summarise))
+        return 0
     if args.smoke:
         return smoke()
     try:
