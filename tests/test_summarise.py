@@ -75,8 +75,11 @@ def test_main_prints_the_table_and_exits_zero(tmp_path, capsys):
     assert capsys.readouterr().out.strip() == NONE_YET
 
 
-def test_the_committed_live_folder_is_empty_and_run_py_works():
-    assert [p.name for p in (ROOT / "results" / "live").iterdir()] == [".gitkeep"]
-    done = subprocess.run([sys.executable, str(ROOT / "run.py"), "--summarise", str(ROOT / "results" / "live")],
+def test_the_committed_live_runs_summarise_through_run_py():
+    live = ROOT / "results" / "live"
+    names = sorted(p.name for p in live.iterdir() if p.name != ".gitkeep")
+    assert names and all(n.startswith("dashboard-") and n.endswith(".json") for n in names)
+    done = subprocess.run([sys.executable, str(ROOT / "run.py"), "--summarise", str(live)],
                           capture_output=True, text=True, check=True)
-    assert done.stdout.strip() == NONE_YET
+    assert "| v1 |" in done.stdout and "| v2 |" in done.stdout
+    assert "claude-cli" in done.stdout and "Skipped" not in done.stdout

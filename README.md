@@ -28,9 +28,21 @@ Offline, with 20 callers and rule based demo agents. This is a scripted walkthro
 2. Switch to "v2 fixed prompt" and run again: **95%**. One failure is left, shown as the next fix: a Hinglish caller asked for a manager and never got a callback offer.
 
 ## Live results
-No live runs committed yet.
+Real runs on 17 Nov 2026, `claude-cli` backend, same SOP and same callers for both prompts (models recorded in the result files: `claude-haiku-5-5` and `claude-sonnet-5-5`). Raw files are in `results/live/`.
 
-To make some, run the real thing on your own Claude login (about 110 `claude -p` calls for v1 then v2 at the default size):
+| agent | callers | passed | failed | pass rate |
+|---|---|---|---|---|
+| v1 naive prompt | 20 | 4 | 16 | **20%** |
+| v2 fixed prompt | 20 | 14 | 6 | **70%** |
+| v1 naive prompt | 5 (fixed story set) | 0 | 5 | 0% |
+| v2 fixed prompt | 5 (fixed story set) | 4 | 1 | 80% |
+
+What the runs show:
+- v1 fails mostly for one habit: it reads the loan account number out in its opening line (13 of its 16 failures). The dashboard names the rule and the turn.
+- v2 fixes that, and the dashboard then shows what is left: two callers who ask for a manager never get a callback offer, three calls state the amount before the caller is confirmed (one of them in Hinglish), and one call skips the "Asha from Acme Finance" opening.
+- One run per prompt per size, so treat the numbers as a snapshot, not a measurement. The offline 70% and 95% above are a scripted walkthrough, not these results.
+
+To make your own, run the real thing on your own Claude login (about 110 `claude -p` calls for v1 then v2 at the default size):
 ```bash
 python run.py --backend claude-cli --callers 20
 ```
