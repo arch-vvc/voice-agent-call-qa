@@ -30,12 +30,17 @@ Offline, with 20 callers and rule based demo agents. This is a scripted walkthro
 ## Live results
 Real runs on 17 Nov 2026, `claude-cli` backend, same SOP and same callers for both prompts (models recorded in the result files: `claude-haiku-5-5` and `claude-sonnet-5-5`). Raw files are in `results/live/`.
 
-| agent | callers | passed | failed | pass rate |
-|---|---|---|---|---|
-| v1 naive prompt | 20 | 4 | 16 | **20%** |
-| v2 fixed prompt | 20 | 14 | 6 | **70%** |
-| v1 naive prompt | 5 (fixed story set) | 0 | 5 | 0% |
-| v2 fixed prompt | 5 (fixed story set) | 4 | 1 | 80% |
+<!-- live:start -->
+| date | agent version | backend | models | callers | turns | passed | failed | needs review | pass rate |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-17 | v1 | claude-cli | claude-haiku-5-5, claude-sonnet-5-5 | 5 | 4 | 0 | 5 | 0 | 0.0% |
+| 2026-11-17 | v1 | claude-cli | claude-haiku-5-5, claude-sonnet-5-5 | 20 | 4 | 4 | 16 | 0 | 20.0% |
+| 2026-11-17 | v2 | claude-cli | claude-haiku-5-5, claude-sonnet-5-5 | 5 | 4 | 4 | 1 | 0 | 80.0% |
+| 2026-11-17 | v2 | claude-cli | claude-haiku-5-5, claude-sonnet-5-5 | 20 | 4 | 14 | 6 | 0 | 70.0% |
+
+v1: 2 runs, mean 10.0%, lowest 0.0%, highest 20.0%
+v2: 2 runs, mean 75.0%, lowest 70.0%, highest 80.0%
+<!-- live:end -->
 
 What the runs show:
 - v1 fails mostly for one habit: it reads the loan account number out in its opening line (13 of its 16 failures). The dashboard names the rule and the turn.
