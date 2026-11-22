@@ -10,3 +10,4 @@ evals/results/
 screenshots/*.png
 !screenshots/*-final.png
 .DS_Store
+.vercel
