@@ -15,6 +15,7 @@ import tempfile
 import zlib
 from http.cookies import SimpleCookie
 from pathlib import Path
+from urllib.parse import parse_qs
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -82,6 +83,13 @@ def history_cookie(items: list) -> str:
     return f"{COOKIE}={raw}; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax"
 
 
+def request_path(environ) -> str:
+    """The path the visitor asked for. vercel.json rewrites every request to this file as ?p=<path>, because the
+    function itself only sees its own address."""
+    wanted = parse_qs(environ.get("QUERY_STRING", "")).get("p", [""])[0]
+    return "/" + wanted.lstrip("/")
+
+
 def respond(start_response, status: int, body: bytes, content_type: str, extra=()):
     reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 404: "Not Found"}.get(status, "Error")
     headers = [("Content-Type", content_type), ("Content-Length", str(len(body))), ("Cache-Control", "no-store"),
@@ -97,7 +105,7 @@ def reply_json(start_response, status: int, payload, extra=()):
 
 def app(environ, start_response):
     method = environ["REQUEST_METHOD"]
-    path = environ.get("PATH_INFO", "/").split("?")[0]
+    path = request_path(environ)
     if method == "GET" and path in ("/", "/index.html"):
         return respond(start_response, 200, INDEX.read_bytes(), "text/html; charset=utf-8")
     if method == "GET" and path == "/api/config":
