@@ -228,6 +228,10 @@ class AnthropicBackend:
         return self._client
 
     def complete(self, system: str, messages: list[dict], model: str, max_tokens: int) -> str:
+        return self.complete_with_usage(system, messages, model, max_tokens)[0]
+
+    def complete_with_usage(self, system: str, messages: list[dict], model: str, max_tokens: int):
+        """(text, usage) where usage is the SDK's {"input_tokens", "output_tokens"} (None if the reply has none)."""
         extra = {"system": system} if system else {}
         try:
             resp = self._get_client().messages.create(model=model, max_tokens=max_tokens, messages=messages, **extra)
@@ -235,7 +239,12 @@ class AnthropicBackend:
             raise
         except Exception as exc:
             raise BackendError(f"{type(exc).__name__}: {exc}", kind=_sdk_error_kind(exc)) from exc
-        return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+        text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+        sdk = getattr(resp, "usage", None)
+        counts = (getattr(sdk, "input_tokens", None), getattr(sdk, "output_tokens", None))
+        if not all(isinstance(n, int) for n in counts):
+            return text, None
+        return text, {"input_tokens": counts[0], "output_tokens": counts[1]}
 
 
 def _sdk_error_kind(exc: Exception) -> str:

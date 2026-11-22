@@ -13,6 +13,8 @@
     "Example warning: persona generator fell back to templates"
   ],
   "callers": 5,
+  "set": "story",
+  "repeats": 1,
   "max_turns": 4,
   "estimated_calls": 45,
   "agent_kind": "llm",

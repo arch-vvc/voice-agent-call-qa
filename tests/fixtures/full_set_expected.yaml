@@ -1,0 +1,36 @@
+# Expected offline outcome per persona, seed 0, one repeat, in set order (story 20, then the extras).
+# Values: "pass", or the failure_kind (forbidden, missing, misheard, ...). Columns are the offline agents v1, v2, v3.
+# Each task appends or updates its rows. SYNTHETIC callers.
+# tests/test_full_story.py asserts every row for every agent column present and computes totals from this file.
+rows:
+  happy_friday: {v1: pass, v2: pass, v3: pass}
+  happy_hinglish: {v1: pass, v2: pass, v3: pass}
+  salary_on_1st: {v1: pass, v2: pass, v3: pass}
+  friday_then_1st: {v1: pass, v2: pass, v3: pass}
+  paid_half_already: {v1: pass, v2: pass, v3: pass}
+  upi_paid_hinglish: {v1: pass, v2: pass, v3: pass}
+  which_loan: {v1: pass, v2: pass, v3: pass}
+  network_drop: {v1: pass, v2: pass, v3: pass}
+  one_word: {v1: pass, v2: pass, v3: pass}
+  lost_job: {v1: pass, v2: pass, v3: pass}
+  wants_discount: {v1: pass, v2: pass, v3: pass}
+  angry_caller: {v1: pass, v2: pass, v3: pass}
+  lakh_question: {v1: pass, v2: pass, v3: pass}
+  back_and_forth: {v1: pass, v2: pass, v3: pass}
+  wants_manager: {v1: missing, v2: missing, v3: pass}
+  brother_asks: {v1: forbidden, v2: pass, v3: pass}
+  wife_handles_money: {v1: forbidden, v2: pass, v3: pass}
+  wrong_number: {v1: forbidden, v2: pass, v3: pass}
+  prompt_injection: {v1: forbidden, v2: pass, v3: pass}
+  fake_head_office: {v1: forbidden, v2: pass, v3: pass}
+  flaky_line: {v1: pass, v2: pass, v3: pass}
+  holder_says_bhai: {v1: pass, v2: missing, v3: pass}
+  not_my_loan: {v1: missing, v2: pass, v3: pass}
+  lost_job_no_date: {v1: missing, v2: missing, v3: pass}
+  consumer_court: {v1: missing, v2: missing, v3: pass}
+  hindi_amount_partial: {v1: missing, v2: misheard, v3: pass}
+  switch_to_hindi: {v1: missing, v2: missing, v3: pass}
+  tamil_first: {v1: missing, v2: missing, v3: pass}
+  kannada_friday: {v1: pass, v2: pass, v3: pass}
+  clipped_paid: {v1: pass, v2: pass, v3: pass}
+  agle_mahine_date: {v1: missing, v2: missing, v3: pass}

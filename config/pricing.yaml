@@ -1,0 +1,13 @@
+schema_version: 1
+# Read from https://platform.claude.com/docs/en/about-claude/pricing on 2026-11-06 (first party Claude API, USD per
+# million tokens, base input and output). Haiku 5.5 is priced by prompt length: these are the rates for prompts up to
+# 100,000 tokens (over that: input 0.50, output 2.50). Call QA prompts are far below that. Prompt caching and batch
+# discounts are not applied, so a cached or batched run costs less than shown. Cost is tokens times these rates.
+source_url: "https://platform.claude.com/docs/en/about-claude/pricing"
+retrieved_on: "2026-11-06"
+note: "Snapshot of published prices. Verify before quoting."
+currency: USD
+per_million_tokens:
+  claude-sonnet-5-5: {input: 2.0, output: 10.0}
+  claude-haiku-5-5: {input: 0.10, output: 0.50}
+aliases: {sonnet: claude-sonnet-5-5, haiku: claude-haiku-5-5}

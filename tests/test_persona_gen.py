@@ -41,6 +41,7 @@ def llm_persona(pid, language="en", tags=("happy",), **extra):
         "expectations": "PASS if the agent confirms Friday.", "must_include": ["friday"], "must_not_include": [],
         "sop_rule": "Ask for a specific payment date and repeat the final date back to the caller.",
         "fix_hint": "Repeat the date back.", "synthetic": True,
+        "traits": ["hindi_numbers"],  # the generator needs one trait caller, or it swaps one in (A5b)
     }
     item.update(extra)
     return item

@@ -15,6 +15,8 @@ import pytest
 from callqa.__main__ import bind_server, main, parse_args, resolve_config
 
 ROOT = Path(__file__).resolve().parents[1]  # the call QA folder, wherever it lives
+# The monorepo root has the project CLAUDE.md. A standalone export of this folder has none.
+REPO_CLAUDE_MD = ROOT.parents[1] / "CLAUDE.md" if ROOT.parent.name == "demos" else None
 SMOKE_LINE = "SMOKE OK v1 70% (14/20) v2 95% (19/20)"
 CHECK_20 = ("CHECK OK backend=offline callers=20 v1 70% (14/20) v2 95% (19/20) "
             "v2 leaks: none; v2 failures: wants_manager")
@@ -130,7 +132,11 @@ def test_docs_describe_the_command():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for needle in ("python -m callqa", "70%", "95%", "about 55", "no API key"):
         assert needle in readme
-    assert "drop `--offline`" not in readme
+    claude_md = REPO_CLAUDE_MD.read_text(encoding="utf-8") if REPO_CLAUDE_MD else ""
+    if REPO_CLAUDE_MD:
+        assert "Call QA dashboard: `python demos/call-qa/run.py`" in claude_md
+        assert "Call QA dashboard: not built yet" not in claude_md
+    assert "drop `--offline`" not in readme + claude_md
 
 
 def slow_respond(history):
@@ -210,4 +216,83 @@ def test_docs_say_free_check_is_offline():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "python -m callqa --check --backend offline" in readme
     assert "about 110" in readme
-    assert "localhost" not in readme
+    if REPO_CLAUDE_MD:
+        assert "localhost" not in REPO_CLAUDE_MD.read_text(encoding="utf-8")
+
+
+def test_command_dispatch_leaves_flags_working():
+    smoke = run_cli("--smoke")
+    assert smoke.returncode == 0, smoke.stderr
+    assert smoke.stdout.strip().splitlines()[-1] == SMOKE_LINE
+    check = run_cli("--check", "--backend", "offline")
+    assert check.returncode == 0, check.stderr
+    assert check.stdout.strip().splitlines()[-1] == CHECK_20
+    check5 = run_cli("--check", "--backend", "offline", "--callers", "5")
+    assert check5.stdout.strip().splitlines()[-1] == CHECK_5
+    ran = run_cli("eval", "--agent", "v1", "--backend", "offline", "--no-save")
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.splitlines()[0] == "EVAL agent=v1 set=story callers=20 repeats=1 seed=0 backend=offline"
+
+
+def test_dashboard_flags_set_and_repeats():
+    args = parse_args(["--set", "full", "--repeats", "3", "--offline"])
+    assert (args.set, args.repeats) == ("full", 3)
+    cfg = resolve_config(args)
+    assert (cfg.set_name, cfg.repeats, cfg.callers) == ("full", 3, 20)  # callers stays the story count
+    assert parse_args([]).set == "story" and parse_args([]).repeats == 1
+    for bad in (["--repeats", "6"], ["--repeats", "0"], ["--set", "huge"], ["--set", "full", "--callers", "5"]):
+        with pytest.raises(SystemExit):
+            parse_args(bad)
+
+
+def test_dashboard_over_200_calls_on_an_llm_backend_needs_yes(capsys):
+    fake_which = lambda name: "/usr/bin/claude"  # noqa: E731  (never executed: main stops before any run)
+    from callqa import __main__ as cli
+    big = parse_args(["--backend", "claude-cli", "--set", "full", "--repeats", "5"])
+    cfg = resolve_config(big, which=fake_which)
+    assert cli.guard_large_run(cfg, big) == 2
+    assert "--yes" in capsys.readouterr().err
+    assert cli.guard_large_run(cfg, parse_args(["--backend", "claude-cli", "--set", "full", "--repeats", "5",
+                                                "--yes"])) == 0
+    assert cli.guard_large_run(resolve_config(parse_args(["--offline", "--set", "full", "--repeats", "5"])), big) == 0
+
+
+@pytest.fixture
+def stub_claude(tmp_path):
+    """A `claude` first on PATH that records any call. Returns (PATH, marker file)."""
+    marker = tmp_path / "called"
+    stub = tmp_path / "bin" / "claude"
+    stub.parent.mkdir()
+    stub.write_text(f'#!/bin/sh\ntouch "{marker}"\nexit 1\n')
+    stub.chmod(0o755)
+    return f"{stub.parent}{os.pathsep}{os.environ['PATH']}", marker
+
+
+def test_dashboard_over_200_calls_exits_2_without_yes_and_starts_with_it(stub_claude):
+    path, marker = stub_claude
+    proc = run_cli("--backend", "claude-cli", "--callers", "20", "--no-browser", path=path)
+    assert proc.returncode == 2 and "--yes" in proc.stderr
+    assert not marker.exists()
+    env = {k: v for k, v in os.environ.items() if k not in ("CALLQA_BACKEND", "ANTHROPIC_API_KEY")}
+    env["PATH"] = path
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    server = subprocess.Popen([sys.executable, "-m", "callqa", "--backend", "claude-cli", "--callers", "20", "--yes",
+                               "--no-browser", "--port", str(port)], cwd=ROOT, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert server.stdout.readline().startswith("Call QA dashboard: http://127.0.0.1:")
+    finally:
+        server.kill()
+        server.wait()
+        server.stdout.close()
+        server.stderr.close()
+    assert not marker.exists()
+
+
+def test_check_on_an_llm_backend_over_200_calls_needs_yes(stub_claude):
+    path, marker = stub_claude
+    proc = run_cli("--check", "--backend", "claude-cli", "--callers", "20", path=path)  # v1 and v2: 440 calls
+    assert proc.returncode == 2 and "--yes" in proc.stderr
+    assert not marker.exists()

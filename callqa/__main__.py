@@ -1,4 +1,4 @@
-"""`python -m callqa`: serve the dashboard, or run the headless checks (--smoke, --check)."""
+"""`python -m callqa`: the dashboard, the headless checks (--smoke, --check), or eval, diff, compare, calibrate."""
 from __future__ import annotations
 
 import argparse
@@ -9,15 +9,30 @@ import threading
 import webbrowser
 from dataclasses import dataclass
 
+from callqa import calibrate, compare, diff, evaluate
+from callqa.compliance import DEFAULT_RULES_PATH, RulesError, load_rules
+from callqa.persona_sets import SET_NAMES
 from callqa.personas import generate_personas
-from callqa.server import DEFAULT_AGENTS, build_agent_for, make_server, read_sample_sop, run_check
-from callqa.summarise import summarise
+from callqa.server import (
+    DEFAULT_AGENTS,
+    LARGE_RUN_CALLS,
+    MAX_DASHBOARD_REPEATS,
+    build_agent_for,
+    caller_count,
+    estimate_calls,
+    make_server,
+    needs_confirmation,
+    read_sample_sop,
+    run_check,
+)
 from evals.backends import BACKEND_NAMES, BackendError, get_backend
 from evals.run_evals import RUN_DEFAULTS, RunAborted, run_suite
 
 SMOKE_EXPECTED = {"v1": 14, "v2": 19}
 SMOKE_CALLERS = 20
 PORT_TRIES = 11  # the asked for port, then the next 10
+# first argument -> that module's main(argv); later tasks add more
+COMMANDS = {"eval": evaluate.main, "diff": diff.main, "compare": compare.main, "calibrate": calibrate.main}
 
 
 @dataclass
@@ -27,6 +42,9 @@ class Config:
     max_turns: int
     workers: int
     agents: list[dict]
+    set_name: str = "story"
+    repeats: int = 1
+    rules: object = None  # a callqa.compliance.Rules, or None when the layer is off
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -35,6 +53,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="default: $CALLQA_BACKEND, else claude-cli (offline, with a warning, if claude is missing)")
     p.add_argument("--offline", action="store_true", help="same as --backend offline")
     p.add_argument("--callers", type=int, help="simulated callers per run (default 5 on LLM backends, 20 offline)")
+    p.add_argument("--set", choices=SET_NAMES, default="story",
+                   help="dashboard caller set (default story: 5 callers on LLM backends, 20 offline; full: all 31)")
+    p.add_argument("--repeats", type=int, default=1, metavar=f"1-{MAX_DASHBOARD_REPEATS}",
+                   help="dashboard runs per caller (default 1)")
+    p.add_argument("--yes", action="store_true",
+                   help=f"allow a dashboard run of more than {LARGE_RUN_CALLS} model calls on an LLM backend")
     p.add_argument("--max-turns", type=int, help="turns per call (default 4 on LLM backends, 8 offline)")
     p.add_argument("--workers", type=int, help="calls in parallel (default 2 for claude-cli, 4 otherwise)")
     p.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 8000),
@@ -44,8 +68,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="offline, 20 callers, v1 then v2, print SMOKE OK or what differs (ignores env)")
     p.add_argument("--check", action="store_true",
                    help="run v1 then v2 on the selected backend and gate the before/after (exit 0 or 1)")
-    p.add_argument("--summarise", metavar="FOLDER",
-                   help="print a Markdown table of the live runs saved in FOLDER (for example results/live), then exit")
+    p.add_argument("--rules", metavar="PATH", help="compliance rules file for the dashboard, or none to turn the "
+                   "layer off (default: rules/collections_india.yaml, the file eval uses)")
     p.add_argument("--agent", action="append", default=[], metavar="ID=LABEL=MODULE:FUNCTION",
                    help="add or replace a dashboard agent with your own respond(history) function; repeatable")
     args = p.parse_args(argv)
@@ -53,6 +77,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         value = getattr(args, flag)
         if value is not None and value < 1:
             p.error(f"--{flag.replace('_', '-')} must be at least 1")
+    if not 1 <= args.repeats <= MAX_DASHBOARD_REPEATS:
+        p.error(f"--repeats must be from 1 to {MAX_DASHBOARD_REPEATS}")
+    if args.set == "full" and args.callers is not None:
+        p.error("--callers cannot be used with --set full; the full set is always all of its callers")
     if args.offline and args.backend not in (None, "offline"):
         p.error(f"--offline cannot be combined with --backend {args.backend}")
     return args
@@ -88,15 +116,20 @@ def resolve_config(args: argparse.Namespace, which=None) -> Config:
         max_turns=args.max_turns or defaults["max_turns"],
         workers=args.workers or defaults["workers"],
         agents=list(agents.values()),
+        set_name=args.set,
+        repeats=args.repeats,
+        rules=None if (args.rules or "").lower() == "none" else load_rules(args.rules or DEFAULT_RULES_PATH),
     )
 
 
-def bind_server(cfg: Config, port: int):
+def bind_server(cfg: Config, port: int, allow_large: bool = False, results_dir=None):
     """Bind the asked for port, or the next free one of the following 10."""
     last_error = None
     for candidate in range(port, port + PORT_TRIES):
         try:
-            return make_server(cfg.backend, cfg.callers, cfg.max_turns, cfg.workers, cfg.agents, port=candidate)
+            return make_server(cfg.backend, cfg.callers, cfg.max_turns, cfg.workers, cfg.agents, port=candidate,
+                               set_name=cfg.set_name, repeats=cfg.repeats, allow_large=allow_large,
+                               results_dir=results_dir, rules=cfg.rules)
         except OSError as exc:
             last_error = exc
     raise SystemExit(f"error: no free port from {port} to {port + PORT_TRIES - 1}: {last_error}")
@@ -138,9 +171,11 @@ def check(cfg: Config) -> int:
 
 
 def serve(cfg: Config, args: argparse.Namespace) -> int:
-    server = bind_server(cfg, args.port)
+    server = bind_server(cfg, args.port, args.yes)
     url = f"http://127.0.0.1:{server.server_address[1]}"  # the server binds IPv4 only
-    print(f"Call QA dashboard: {url}  (backend {cfg.backend.name}, {cfg.callers} callers; Ctrl-C to stop)", flush=True)
+    repeats = f", {cfg.repeats} repeats" if cfg.repeats > 1 else ""
+    print(f"Call QA dashboard: {url}  (backend {cfg.backend.name}, {cfg.callers} callers{repeats}; Ctrl-C to stop)",
+          flush=True)
     if not args.no_browser:
         webbrowser.open(url)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -161,23 +196,36 @@ def serve(cfg: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def guard_large_run(cfg: Config, args: argparse.Namespace, agent_versions: int = 1) -> int:
+    """2 (with the reason on stderr) for a run over LARGE_RUN_CALLS model calls without --yes, else 0.
+    The dashboard runs one agent version at a time; --check runs two."""
+    estimate = agent_versions * estimate_calls(caller_count(cfg.set_name, cfg.callers), cfg.max_turns, cfg.repeats)
+    if needs_confirmation(cfg.backend, estimate) and not args.yes:
+        print(f"error: this would make about {estimate} model calls on {cfg.backend.name} "
+              f"(limit {LARGE_RUN_CALLS}); add --yes to allow it, or use --backend offline", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in COMMANDS:
+        return COMMANDS[argv[0]](argv[1:])
     args = parse_args(argv)
-    if args.summarise:
-        print(summarise(args.summarise))
-        return 0
     if args.smoke:
         return smoke()
     try:
         cfg = resolve_config(args)
-    except BackendError as exc:
+    except (BackendError, RulesError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     for warning in cfg.backend.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     os.environ["CALLQA_BACKEND"] = cfg.backend.name  # --agent functions use the same backend
     if args.check:
-        return check(cfg)
+        return guard_large_run(cfg, args, agent_versions=2) or check(cfg)
+    if guard_large_run(cfg, args):
+        return 2
     return serve(cfg, args)
 
 

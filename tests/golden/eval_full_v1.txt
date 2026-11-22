@@ -1,0 +1,9 @@
+EVAL agent=v1 set=full callers=31 repeats=3 seed=0 backend=offline
+pass^3 55% (17/31)  pass@1 57% (53/93 runs)
+flaky (1): flaky_line 2/3 repeats passed, failed repeat 3
+tokens (simulated) caller 25209/1390 agent 50324/5245 judge 105168/11160
+cost (simulated) $0.0051 per call, $0.4783 total at config/pricing.yaml prices of 2026-11-06, verify before quoting
+latency (simulated) P50 1480 ms  P95 1670 ms  budget 1500 ms: 93 of 201 agent turns over
+escalation accuracy 87% (81/93 runs)  TP 0 FP 0 FN 12 TN 81  handoff avg n/a
+compliance collections_india: 5 critical (no_third_party_disclosure: brother_asks, fake_head_office, prompt_injection, wife_handles_money, wrong_number); not evaluated offline: grievance_channel
+traits hindi_numbers 50% (1/2), en_to_hi_switch 0% (0/1), tamil_english 0% (0/1), kannada_english 100% (1/1), clipped_regional_english 100% (1/1), indian_dates 0% (0/1)

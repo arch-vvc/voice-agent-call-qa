@@ -13,8 +13,8 @@ Claude login (default), `anthropic` uses ANTHROPIC_API_KEY, `offline` makes no m
 Your agent is any function `respond(history) -> str`, where history is a list of
 {"role": "user" | "assistant", "content": str} messages, newest last.
 
-  python evals/run_evals.py --agent evals.example_agent:respond --runs 3
-  python evals/run_evals.py --agent app.agent:respond --offline   # no model calls
+  python demos/call-qa/evals/run_evals.py --agent evals.example_agent:respond --runs 3
+  python demos/call-qa/evals/run_evals.py --agent app.agent:respond --offline   # no model calls
 
 Works from any directory. Personas and results live next to this file, and the call QA folder is put
 on sys.path so `evals.example_agent` resolves.
@@ -41,7 +41,7 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("pip install pyyaml")
 
-# Running `python evals/run_evals.py` puts evals/ on sys.path, not the call QA folder. Agents import
+# Running `python demos/call-qa/evals/run_evals.py` puts evals/ on sys.path, not the call QA folder. Agents import
 # `evals.backends`, so import it by that name here too, or BackendError would be two different classes.
 # Personas and results are found next to this file, so the command works from any directory.
 HERE = Path(__file__).resolve().parent
@@ -49,6 +49,18 @@ PRODUCT_DIR = HERE.parent
 if str(PRODUCT_DIR) not in sys.path:
     sys.path.insert(0, str(PRODUCT_DIR))
 
+from callqa.compliance import (  # noqa: E402
+    COMPLIANCE_ASK,
+    check_call,
+    combine_judge_compliance,
+    first_critical_failure,
+    judge_rules,
+    judge_section,
+)
+from callqa.escalation import grade_handoff, split_handoff  # noqa: E402
+from callqa.indic import misheard_failure  # noqa: E402
+from callqa.metering import Meter, MeteredBackend, simulate_usage, use_meter  # noqa: E402
+from callqa.sop import parse_sop  # noqa: E402
 from evals.backends import ABORT_KINDS, BACKEND_NAMES, BackendError, LLMBackend, get_backend, model_for  # noqa: E402
 
 SIM_MODEL = model_for("caller")  # kept for old imports; the code below calls model_for() at call time
@@ -74,13 +86,19 @@ class RunResult:
     transcript: list[dict] = field(default_factory=list)
     seconds: float = 0.0
     failing_turn: int | None = None  # 0 based index into transcript, None when passed or not pinned to a turn
-    failure_kind: str | None = None  # "forbidden" | "missing" | "judge" | "crash" | "needs_review", None when passed
+    failure_kind: str | None = None  # "forbidden" | "missing" | "misheard" | "judge" | "crash"
     notes: str = ""  # style observations from the judge (reply length, tone): shown in grey, never a failure
-    needs_review: bool = False  # the two judge runs disagreed: not a pass, not a failure, flagged amber
-
-    @property
-    def flaky(self) -> bool:  # old name for needs_review
-        return self.needs_review
+    judge_split: bool = False  # the two judge runs disagreed: counted as a pass and flagged amber
+    seed: int = 0  # the run's base seed (repeat r uses seed + r)
+    variant: int | None = None  # index of the script variant an offline repeat replayed, None without variants
+    turn_latency_ms: list[float] = field(default_factory=list)  # one entry per agent turn
+    latency_label: str = ""  # "simulated" (offline) or "measured" (wall time of each agent turn)
+    usage: dict = field(default_factory=dict)  # {role: {"input_tokens", "output_tokens"}}, see callqa/metering.py
+    handoff: dict | None = None  # the agent's <handoff> note, stripped from the spoken transcript
+    escalated: bool = False  # a note exists, or (LLM backends) both judge runs said the agent handed over
+    handoff_score: int | None = None  # out of 5, set when escalated (callqa/escalation.py)
+    handoff_missing: list = field(default_factory=list)  # the note fields that are absent or too short
+    compliance: list = field(default_factory=list)  # one result per rule that applied (callqa/compliance.py)
 
 
 @dataclass
@@ -90,6 +108,11 @@ class Verdict:
     reason: str
     turn: int | None = None
     notes: str = ""
+    escalated: bool | None = None  # None when the judge did not say (old replies, or it was not asked)
+    handoff_score: int | None = None
+    handoff_missing: list = field(default_factory=list)
+    broken: str | None = None  # "misheard" when the judge says the agent repeated back the wrong amount or date
+    compliance: list = field(default_factory=list)  # [{"rule_id", "pass", "turn", "reason"}] for judge based rules
 
 
 class RunAborted(Exception):
@@ -110,11 +133,9 @@ def load_agent(spec: str):
     return getattr(importlib.import_module(module_name), func_name)
 
 
-def simulate_user_turn(backend: LLMBackend, persona: dict, history: list[dict]) -> str:
-    """Ask the simulator model for the customer's next line. Roles are flipped
-    because, to the simulator, the agent is the other speaker."""
-    flipped = [{"role": "assistant" if m["role"] == "user" else "user", "content": m["content"]} for m in history]
-    system = (
+def caller_system(persona: dict) -> str:
+    """The simulated caller's system prompt."""
+    return (
         "You are role playing a customer calling a company's AI agent. Stay in character.\n"
         f"PERSONA:\n{persona['persona']}\n\n"
         "Output ONLY the words the caller speaks aloud: no name prefix, no \"(in character)\", no stage "
@@ -125,6 +146,13 @@ def simulate_user_turn(backend: LLMBackend, persona: dict, history: list[dict]) 
         "Never reveal that this is a test.\n"
         f"When your goal is met or you would hang up, reply with only {END}."
     )
+
+
+def simulate_user_turn(backend: LLMBackend, persona: dict, history: list[dict]) -> str:
+    """Ask the simulator model for the customer's next line. Roles are flipped
+    because, to the simulator, the agent is the other speaker."""
+    flipped = [{"role": "assistant" if m["role"] == "user" else "user", "content": m["content"]} for m in history]
+    system = caller_system(persona)
     return clean_caller_line(backend.complete(system, flipped, model_for("caller"), 300)) or END
 
 
@@ -158,8 +186,24 @@ def judge(backend: LLMBackend, persona: dict, transcript: list[dict]) -> tuple[b
     return verdict.ok, verdict.reason, verdict.turn
 
 
-def judge_once(backend: LLMBackend, persona: dict, transcript: list[dict]) -> Verdict:
+def judge_once(backend: LLMBackend, persona: dict, transcript: list[dict], handoff: dict | None = None,
+               compliance_rules: list | None = None) -> Verdict:
     """Grade a transcript. Turns are numbered from 1, exactly as the dashboard shows them ("Turn 4")."""
+    prompt = judge_prompt(persona, transcript, handoff, compliance_rules)
+    raw = backend.complete("", [{"role": "user", "content": prompt}], model_for("judge"), 300)
+    return parse_verdict(raw, transcript)
+
+
+ESCALATION_ASK = (
+    ' Also add "escalated": true if the agent handed the call to a human or another team, else false; '
+    '"handoff_score": 0 to 5, one point for each handoff note field (caller, issue, tried, why, next_step) that '
+    'is present and says something useful, or null if there is no note; "handoff_missing": the note fields '
+    "that are missing or empty."
+)
+
+
+def judge_prompt(persona: dict, transcript: list[dict], handoff: dict | None = None,
+                 compliance_rules: list | None = None) -> str:
     convo = "\n".join(
         f"[{i + 1}] {'CUSTOMER' if m['role'] == 'user' else 'AGENT'}: {m['content']}" for i, m in enumerate(transcript)
     )
@@ -171,10 +215,14 @@ def judge_once(backend: LLMBackend, persona: dict, transcript: list[dict]) -> Ve
         "a date.\n\n"
         if persona.get("judge_decides_date") is True else ""
     )
+    asks = persona.get("must_escalate") is True  # only callers who must be handed over: other prompts stay as they were
+    note = ("The agent's handoff note (not spoken to the customer):\n" + json.dumps(handoff, ensure_ascii=False)
+            + "\n\n") if asks and handoff else ""
     prompt = (
         "You grade a conversation between a customer and an AI agent.\n"
         f"Pass rule:\n{persona['expectations']}\n\n{date_rule}{_rules_under_test(persona)}{_hints(persona)}"
-        f"Transcript (each turn starts with its number):\n{convo}\n\n"
+        f"{judge_section(compliance_rules or [])}"
+        f"Transcript (each turn starts with its number):\n{convo}\n\n{note}"
         "Check the pass rule explicitly: every requirement it lists must be met, and in notes say which turn met "
         "each one. FAIL the call only if the agent broke the pass rule or the SOP rule under test, or broke one of "
         "the SOP's Never rules. Style (reply length, tone, wording) is never a failure: describe it under "
@@ -182,20 +230,50 @@ def judge_once(backend: LLMBackend, persona: dict, transcript: list[dict]) -> Ve
         "Hinglish); a language mismatch is a note, never a failure.\n"
         'Reply with JSON only: {"pass": true or false, "reason": "<one sentence citing the turn>", '
         '"broken": "target" (the pass rule or the SOP rule under test) or "never" (a Never rule) or "style" '
-        "(only a style problem; use this and pass=false only if nothing else is wrong), "
+        "(only a style problem; use this and pass=false only if nothing else is wrong)"
+        + (' or "misheard" (the agent repeated back or confirmed a different amount or date than the caller said)'
+           if persona.get("said_values") else "") + ", "
         '"turn": <the number of the AGENT turn where the rule was broken, or where the agent should have acted; '
         'it must be an AGENT turn from the transcript, never a CUSTOMER turn; null if it passes>, '
-        '"notes": "<optional style observations>"}'
+        '"notes": "<optional style observations>"' + (ESCALATION_ASK if asks else "")
+        + (COMPLIANCE_ASK if compliance_rules else "") + "}"
     )
-    raw = backend.complete("", [{"role": "user", "content": prompt}], model_for("judge"), 300)
+    return prompt
+
+
+def _escalation_keys(data: dict) -> dict:
+    """The optional escalation keys of a judge reply; anything of the wrong type counts as not said."""
+    score, missing = data.get("handoff_score"), data.get("handoff_missing")
+    return {
+        "escalated": data["escalated"] if isinstance(data.get("escalated"), bool) else None,
+        "handoff_score": score if isinstance(score, int) and not isinstance(score, bool) else None,
+        "handoff_missing": [m for m in missing if isinstance(m, str)] if isinstance(missing, list) else [],
+    }
+
+
+def _compliance_entries(data: dict, transcript: list[dict]) -> list[dict]:
+    """The optional `compliance` list of a judge reply; entries of the wrong shape are dropped."""
+    entries = data.get("compliance")
+    if not isinstance(entries, list):
+        return []
+    return [{"rule_id": e["rule_id"], "pass": e["pass"], "turn": _cited_turn(e.get("turn"), transcript),
+             "reason": str(e.get("reason") or "")}
+            for e in entries
+            if isinstance(e, dict) and isinstance(e.get("rule_id"), str) and isinstance(e.get("pass"), bool)]
+
+
+def parse_verdict(raw: str, transcript: list[dict]) -> Verdict:
     try:
         data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
         if not isinstance(data["pass"], bool):
             raise ValueError("pass is not a boolean")
         reason, notes = str(data.get("reason", "")), str(data.get("notes") or "")
         if not data["pass"] and data.get("broken") == "style":  # a style problem is a grey note, never a failure
-            return Verdict(True, "Only style notes", None, reason or notes)  # one note, never two joined
-        return Verdict(data["pass"], reason, _cited_turn(data.get("turn"), transcript), notes)
+            return Verdict(True, "Only style notes", None, reason or notes, **_escalation_keys(data),
+                           compliance=_compliance_entries(data, transcript))
+        broken = "misheard" if not data["pass"] and data.get("broken") == "misheard" else None
+        return Verdict(data["pass"], reason, _cited_turn(data.get("turn"), transcript), notes,
+                       **_escalation_keys(data), broken=broken, compliance=_compliance_entries(data, transcript))
     except (ValueError, KeyError, TypeError, AttributeError):
         return Verdict(False, f"judge returned unparseable output: {raw[:200]}")
 
@@ -236,17 +314,19 @@ def _cited_turn(value, transcript: list[dict]) -> int | None:
 
 
 def judge_twice(backend: LLMBackend, persona: dict, transcript: list[dict]) -> tuple[bool, str, int | None, str, bool]:
-    """Two judge runs. Both pass: pass. Both fail: fail. If they disagree the call needs review: it is not a pass,
-    not a failure and has no failing turn; the failing run's reason becomes a note.
-    Returns (ok, reason, turn, notes, needs_review)."""
-    first, second = judge_once(backend, persona, transcript), judge_once(backend, persona, transcript)
+    """Two judge runs. A call fails only if both fail. If they disagree it is judge_split: it counts as a pass and the
+    failing run's reason becomes a note. Returns (ok, reason, turn, notes, judge_split)."""
+    return combine_verdicts(judge_once(backend, persona, transcript), judge_once(backend, persona, transcript))
+
+
+def combine_verdicts(first: Verdict, second: Verdict) -> tuple[bool, str, int | None, str, bool]:
     notes = first.notes or second.notes  # one note: the first run's, never the two joined
     if first.ok and second.ok:
         return True, first.reason, None, notes, False
     if not first.ok and not second.ok:
         return False, first.reason, first.turn if first.turn is not None else second.turn, notes, False
     failed = second if first.ok else first
-    return False, "The two judge runs disagreed", None, f"One judge run failed: {failed.reason}", True
+    return True, "The two judge runs disagreed; counted as a pass", None, f"One judge run failed: {failed.reason}", True
 
 
 def _alternatives(entry: str) -> list[str]:
@@ -263,6 +343,9 @@ def locate_failure(
     agent_turns = [(i, m["content"].lower()) for i, m in enumerate(transcript) if m["role"] == "assistant"]
     all_agent_text = " ".join(text for _, text in agent_turns)
     # judge_dates (LLM backends): a payment date is whatever the caller finally gave, so the judge decides it
+    heard = misheard_failure(persona, transcript)  # before the required phrase rule: the cause, not the symptom
+    if heard is not None:
+        return False, heard[0], "misheard", heard[1]
     skip_phrases = live or (judge_dates and persona.get("judge_decides_date") is True)
     for needle in [] if skip_phrases else persona.get("must_include", []):
         options = _alternatives(needle)
@@ -287,51 +370,123 @@ def keyword_checks(persona: dict, transcript: list[dict]) -> tuple[bool, str]:
     return ok, reason
 
 
+def variant_index(seed: int, repeat: int, count: int) -> int:
+    """Which script variant repeat `repeat` replays: (seed + repeat) mod count. With as many repeats as variants,
+    each variant is used exactly once, whatever the seed."""
+    return (seed + repeat) % count
+
+
 def run_one(agent, persona: dict, run: int, max_turns: int, backend: LLMBackend, seed: int,
-            stop: threading.Event | None = None) -> RunResult | None:
-    """Run one conversation. Returns None if `stop` was set. Raises BackendError for limit and auth errors."""
+            stop: threading.Event | None = None, agent_prompt: str = "", rules=None, sop=None) -> RunResult | None:
+    """Run one conversation. Returns None if `stop` was set. Raises BackendError for limit and auth errors.
+
+    Usage and per turn latency go on the result: offline they are simulated from the finished transcript
+    (`agent_prompt` is the agent's system prompt, when known); live, the caller and judge backends are metered and
+    each agent turn is timed. An agent that builds its own backend is metered too, through `use_meter`.
+
+    With `rules` (callqa/compliance.py) and the parsed `sop`, the deterministic rules run on every backend and the
+    judge based rules on live ones; a critical failure fails a call that passed everything else (failure_kind
+    "compliance"). Without `rules` nothing changes."""
     random.seed(seed + run)
     start = time.time()
     offline = backend.name == "offline"
+    meter, turn_ms = Meter(), []
+    caller_backend, judge_backend = MeteredBackend(backend, "caller", meter), MeteredBackend(backend, "judge", meter)
     history: list[dict] = [{"role": "user", "content": persona["opening"]}]
-    scripted = list(persona.get("script", []))
+    variants = persona.get("script_variants") or []
+    variant = variant_index(seed, run, len(variants)) if offline and variants else None
+    scripted = list(variants[variant] if variant is not None else persona.get("script", []))
 
     def crashed(reason: str) -> RunResult:
-        return RunResult(persona["id"], run, False, reason, history, round(time.time() - start, 2), None, "crash")
+        return RunResult(persona["id"], run, False, reason, history, round(time.time() - start, 2), None, "crash",
+                         seed=seed, variant=variant, **measured())
 
-    try:
-        for _ in range(max_turns):
-            if stop is not None and stop.is_set():
-                return None
-            history.append({"role": "assistant", "content": str(agent(list(history)))})
-            if offline:
-                nxt = scripted.pop(0) if scripted else END
-            else:
-                nxt = simulate_user_turn(backend, persona, history)
-            if END in nxt:
-                break
-            history.append({"role": "user", "content": nxt})
+    def measured() -> dict:
+        if offline:
+            return {}
+        return {"turn_latency_ms": list(turn_ms), "latency_label": "measured", "usage": meter.snapshot()}
 
-        if history[-1]["role"] == "user":  # the caller spoke last and did not hang up: the agent still owes a reply
-            history.append({"role": "assistant", "content": str(agent(list(history)))})
-        notes, review = "", False
-        ok, reason, kind, turn = locate_failure(persona, history, judge_dates=not offline, live=not offline)
-        if ok and not offline:
-            ok, reason, turn, notes, review = judge_twice(backend, persona, history)
-            kind = "needs_review" if review else None if ok else "judge"
-            if not ok and not review and turn is None:  # no cited agent turn: point at the last agent turn
+    replies: list[str] = []  # what the agent produced, handoff notes included (they cost tokens and time)
+    handoff: list[dict] = []  # the last note the agent wrote
+
+    def agent_turn() -> None:
+        began = time.perf_counter()
+        reply = str(agent(list(history)))
+        turn_ms.append(round((time.perf_counter() - began) * 1000, 1))
+        spoken, note = split_handoff(reply)
+        replies.append(reply)
+        if note is not None:
+            handoff[:] = [note]
+        history.append({"role": "assistant", "content": spoken})
+
+    with use_meter(meter):
+        try:
+            for _ in range(max_turns):
+                if stop is not None and stop.is_set():
+                    return None
+                agent_turn()
+                if offline:
+                    nxt = scripted.pop(0) if scripted else END
+                else:
+                    nxt = simulate_user_turn(caller_backend, persona, history)
+                if END in nxt:
+                    break
+                history.append({"role": "user", "content": nxt})
+
+            if history[-1]["role"] == "user":  # the caller spoke last and did not hang up: the agent still owes a reply
+                agent_turn()
+            notes, judge_split = "", False
+            note = handoff[0] if handoff else None
+            verdicts: list[Verdict] = []
+            asked = judge_rules(rules, persona) if rules is not None and not offline else []
+            ok, reason, kind, turn = locate_failure(persona, history, judge_dates=not offline, live=not offline)
+            if ok and not offline:
+                verdicts = [judge_once(judge_backend, persona, history, note, asked) for _ in range(2)]
+                ok, reason, turn, notes, judge_split = combine_verdicts(*verdicts)
+                kind = None if ok else "misheard" if all(v.broken == "misheard" for v in verdicts) else "judge"
+                if not ok and turn is None:  # no cited agent turn: point at the last agent turn
+                    turn = next((i for i in range(len(history) - 1, -1, -1) if history[i]["role"] == "assistant"), None)
+            both_say = bool(verdicts) and all(v.escalated is True for v in verdicts)
+            escalated = note is not None or both_say
+            if ok and persona.get("must_escalate") is True and not escalated:
+                ok, kind, reason = False, "missing", "agent never handed over (no handoff note)"
                 turn = next((i for i in range(len(history) - 1, -1, -1) if history[i]["role"] == "assistant"), None)
-    except BackendError as exc:
-        if exc.kind in ABORT_KINDS:
-            raise
-        return crashed(f"backend {exc.kind}: {exc}")
-    except Exception as exc:  # the agent crashing is a failed run, not a crashed harness
-        return crashed(f"agent raised {type(exc).__name__}: {exc}")
-    return RunResult(persona["id"], run, ok, reason, history, round(time.time() - start, 2), turn, kind, notes, review)
+            checked = []
+            if rules is not None:
+                checked = check_call(rules, persona, history, sop or parse_sop(""))
+                checked += combine_judge_compliance(asked, [v.compliance for v in verdicts]) if verdicts else []
+                worst = first_critical_failure(checked)
+                if ok and worst is not None:
+                    ok, kind, turn = False, "compliance", worst["turn"]
+                    reason = f"compliance {worst['rule_id']}: {worst['reason']}"
+        except BackendError as exc:
+            if exc.kind in ABORT_KINDS:
+                raise
+            return crashed(f"backend {exc.kind}: {exc}")
+        except Exception as exc:  # the agent crashing is a failed run, not a crashed harness
+            return crashed(f"agent raised {type(exc).__name__}: {exc}")
+        elapsed = round(time.time() - start, 2)
+    extra = measured()
+    if offline:
+        prompts = {"agent": agent_prompt, "caller": caller_system(persona),
+                   "judge": judge_prompt(persona, history, note)}
+        # Price the agent's replies with their handoff notes: a model writes the note in the same call.
+        raw = iter(replies)
+        costed = [{**m, "content": next(raw)} if m["role"] == "assistant" else m for m in history]
+        usage, latency = simulate_usage(persona, costed, prompts)
+        extra = {"turn_latency_ms": latency, "latency_label": "simulated", "usage": usage}
+    if escalated:
+        judged = [v for v in verdicts if v.handoff_score is not None]
+        score, missing = grade_handoff(
+            note, min((v.handoff_score for v in judged), default=None),
+            [m for v in verdicts for m in v.handoff_missing] if verdicts else None)
+        extra.update(handoff_score=score, handoff_missing=missing)
+    return RunResult(persona["id"], run, ok, reason, history, elapsed, turn, kind, notes, judge_split, seed, variant,
+                     handoff=note, escalated=escalated, compliance=checked, **extra)
 
 
 def run_suite(agent, personas: list[dict], runs: int, max_turns: int, workers: int, backend: LLMBackend, seed: int,
-              on_result=None) -> list[RunResult]:
+              on_result=None, agent_prompt: str = "", rules=None, sop=None) -> list[RunResult]:
     """Run every persona `runs` times and return the results in job order. Prints and writes nothing.
 
     on_result(result) is called once per finished conversation, from the calling thread. If the backend
@@ -344,7 +499,7 @@ def run_suite(agent, personas: list[dict], runs: int, max_turns: int, workers: i
         if stop.is_set():
             return None
         try:
-            return run_one(agent, job[0], job[1], max_turns, backend, seed, stop)
+            return run_one(agent, job[0], job[1], max_turns, backend, seed, stop, agent_prompt, rules, sop)
         except BackendError as exc:  # run_one only raises these for limit and auth
             aborts.append(exc)
             stop.set()
@@ -406,13 +561,10 @@ def main(argv: list[str] | None = None) -> int:
     for pp in personas:
         rs = [r for r in results if r.persona == pp["id"]]
         rate = sum(r.passed for r in rs) / len(rs)
-        fails = "; ".join(sorted({r.reason for r in rs if not r.passed and not r.needs_review}))[:110]
+        fails = "; ".join(sorted({r.reason for r in rs if not r.passed}))[:110]
         print(f"{pp['id']:<24}{rate:>9.0%}   {fails}")
     overall = sum(r.passed for r in results) / len(results)
-    n_review = sum(r.needs_review for r in results)
-    n_failed = len(results) - sum(r.passed for r in results) - n_review
     print(f"\nOVERALL {overall:.0%} over {len(results)} conversations (threshold {args.threshold:.0%})")
-    print(f"passed {sum(r.passed for r in results)}, failed {n_failed}, needs review {n_review}")
 
     out_dir = HERE / "results"
     out_dir.mkdir(parents=True, exist_ok=True)

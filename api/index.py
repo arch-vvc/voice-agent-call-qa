@@ -15,13 +15,14 @@ import tempfile
 import zlib
 from http.cookies import SimpleCookie
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ["CALLQA_BACKEND"] = "offline"
 
-from callqa.server import DEFAULT_AGENTS, INDEX, MAX_BODY, App, Run  # noqa: E402
+from callqa.compliance import DEFAULT_RULES_PATH, load_rules  # noqa: E402
+from callqa.server import DEFAULT_AGENTS, INDEX, MAX_BODY, RECORDS_PAGE, App, Run  # noqa: E402
 from evals.backends import get_backend  # noqa: E402
 from evals.run_evals import RUN_DEFAULTS  # noqa: E402
 
@@ -31,11 +32,12 @@ COOKIE = "callqa_history"
 
 _backend = get_backend("offline")
 _defaults = RUN_DEFAULTS["offline"]
+_rules = load_rules(DEFAULT_RULES_PATH)
 
 
 def make_app() -> App:
     return App(_backend, 20, _defaults["max_turns"], _defaults["workers"], DEFAULT_AGENTS,
-               Path(tempfile.gettempdir()) / "callqa-results")
+               Path(tempfile.gettempdir()) / "callqa-results", rules=_rules)
 
 
 def encode_run(sop: str, agent: str) -> str:
@@ -57,7 +59,7 @@ def run_report(token: str) -> dict:
     if spec["a"] not in app.agents:
         raise ValueError("unknown agent")
     run_id = hashlib.sha1(token.encode("ascii")).hexdigest()[:8]
-    return app._simulate(Run(run_id, app.callers), spec["s"], app.agents[spec["a"]])
+    return app._simulate(Run(run_id, app.callers), spec["s"], app.agents[spec["a"]], "story", 1)
 
 
 def history_entry(report: dict) -> dict:
@@ -108,6 +110,15 @@ def app(environ, start_response):
     path = request_path(environ)
     if method == "GET" and path in ("/", "/index.html"):
         return respond(start_response, 200, INDEX.read_bytes(), "text/html; charset=utf-8")
+    if method == "GET" and path == "/records":
+        return respond(start_response, 200, RECORDS_PAGE.read_bytes(), "text/html; charset=utf-8")
+    if method == "GET" and path == "/api/records":
+        return reply_json(start_response, 200, make_app().records_view())
+    if method == "GET" and path.startswith("/api/records/"):
+        record = make_app().record_view(unquote(path[len("/api/records/"):]))
+        if record is None:
+            return reply_json(start_response, 404, {"error": "unknown record"})
+        return reply_json(start_response, 200, record)
     if method == "GET" and path == "/api/config":
         return reply_json(start_response, 200, make_app().config())
     if method == "GET" and path == "/api/runs":

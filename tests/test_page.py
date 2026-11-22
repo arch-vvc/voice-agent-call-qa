@@ -104,22 +104,34 @@ def _load(name):
 def test_report_fixture_matches_contract():
     report = _load("report_example.json")
     assert set(report) == {
-        "run_id", "sop_hash", "agent", "backend", "callers", "max_turns", "warnings", "generator",
-        "pass_rate", "passed", "needs_review", "flaky", "total", "seconds", "calls", "next_fixes",
+        "schema_version", "kind", "created_at", "synthetic", "simulated", "note", "run_id", "sop_hash", "agent",
+        "backend", "persona_set", "seed", "repeats", "callers", "max_turns", "rules_file", "warnings", "generator",
+        "pass_rate", "passed", "total", "judge_split", "seconds", "consistency", "cost", "latency", "escalation",
+        "compliance", "traits", "calls", "next_fixes",
     }
+    assert (report["schema_version"], report["kind"]) == (1, "run")
+    blocks = ("consistency", "escalation", "compliance", "traits")
+    assert all(report[block] is None for block in blocks)
+    assert report["cost"]["label"] == report["latency"]["label"] == "simulated"
+    assert set(report["cost"]) == {"label", "currency", "per_call", "total", "by_role", "prices", "unknown_models"}
+    assert set(report["latency"]) == {"label", "p50_ms", "p95_ms", "budget_ms", "turns", "over_budget"}
+    assert all(call["usage"] and call["turn_latency_ms"] for call in report["calls"])
+    assert set(report["agent"]) == {"id", "label", "variant", "model"}
+    assert set(report["persona_set"]) == {"name", "count", "ids_sha256"}
     assert isinstance(report["run_id"], str) and isinstance(report["sop_hash"], str)
-    assert set(report["agent"]) == {"id", "label"}
     assert set(report["backend"]) == {"name", "models"}
     assert isinstance(report["backend"]["models"], dict)
     assert isinstance(report["callers"], int) and isinstance(report["max_turns"], int)
     assert isinstance(report["warnings"], list)
     assert set(report["generator"]) == {"source", "warnings"}
     assert _is_number(report["pass_rate"]) and _is_number(report["seconds"])
-    assert isinstance(report["passed"], int) and isinstance(report["total"], int) and report["flaky"] == 0
+    assert isinstance(report["passed"], int) and isinstance(report["total"], int) and report["judge_split"] == 0
 
     call_keys = {
         "persona_id", "name", "language", "tags", "passed", "reason", "failure_kind", "failing_turn",
-        "sop_rule", "fix_hint", "notes", "needs_review", "flaky", "transcript",
+        "sop_rule", "fix_hint", "notes", "judge_split", "transcript", "traits", "severity", "repeats_passed",
+        "repeats_total", "flaky", "failed_repeat", "repeat_results", "escalation", "compliance", "usage",
+        "turn_latency_ms",
     }
     calls = report["calls"]
     assert len(calls) == report["total"] == report["callers"] == 20
@@ -170,7 +182,8 @@ def test_report_fixture_matches_contract():
 def test_config_fixture_matches_contract():
     config = _load("config_example.json")
     assert set(config) == {
-        "backend", "warnings", "callers", "max_turns", "estimated_calls", "agent_kind", "agents", "sample_sop",
+        "backend", "warnings", "callers", "set", "repeats", "max_turns", "estimated_calls", "agent_kind", "agents",
+        "sample_sop",
     }
     assert set(config["backend"]) == {"name", "requested", "models"}
     assert config["backend"]["name"] == "claude-cli"
@@ -185,8 +198,17 @@ def test_config_fixture_matches_contract():
     assert isinstance(config["sample_sop"], str) and config["sample_sop"].strip()
 
 
-def test_page_shows_judge_notes_in_grey_and_the_flaky_count_under_the_headline():
+def test_page_shows_judge_notes_in_grey_and_the_judge_split_count_under_the_headline():
     html = PAGE.read_text(encoding="utf-8")
-    assert 'id="flaky-note"' in html  # "N flaky" sits under the headline number
-    for needle in ("call.flaky", "call.notes", ".note", ".flaky"):
+    assert 'id="judge-split-note"' in html  # "N judge split" sits under the headline number
+    for needle in ("call.judge_split", "call.notes", ".note", ".judge-split"):
         assert needle in html, needle
+
+
+def test_no_judge_flaky_key_left():
+    """`flaky` means passes some repeats but not all (false at one repeat); the judge disagreement is `judge_split`."""
+    report = _load("report_example.json")
+    assert "flaky" not in report and all(call["flaky"] is False for call in report["calls"])
+    assert "flaky" not in (ROOT / "evals" / "run_evals.py").read_text(encoding="utf-8").lower()
+    html = PAGE.read_text(encoding="utf-8")
+    assert "#flaky-note" not in html and 'id="flaky-note"' not in html

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Call QA: run records</title>
+<style>
+  /* Same five tokens as the dashboard. Red pen means "fails"; yellow is not needed here. */
+  :root {
+    --paper: #f7f4ec; --ink: #17150f; --grey: #6b675c; --fail: #d2312a; --mark: #ffe45c;
+    --rule: color-mix(in srgb, var(--grey) 38%, transparent);
+    --display: "Avenir Next Condensed", "DIN Condensed", "Helvetica Neue", Arial, sans-serif;
+    --body: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--body); }
+  h1, h2 { margin: 0; }
+  a, button, select { font-family: inherit; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; padding: 24px 32px 16px; max-width: 1000px; margin: 0 auto; }
+  header h1 { font: 700 32px/1 var(--display); letter-spacing: -.01em; }
+  header .tagline { color: var(--grey); margin-top: 8px; max-width: 56ch; }
+  #dashboard-link { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+  #dashboard-link:hover { text-decoration-thickness: 3px; }
+  #dashboard-link:active { color: var(--grey); }
+  #records-error { margin: 0 auto; max-width: 1000px; padding: 8px 32px; font-size: 14px; color: var(--fail); font-weight: 700; border-top: 2px solid var(--fail); border-bottom: 2px solid var(--fail); }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 16px 32px 64px; }
+  .panel { margin: 0 0 32px; }
+  .panel h2 { font: 700 16px/1.5 var(--body); margin-bottom: 8px; }
+  .pick { display: grid; grid-template-columns: 1fr 1fr auto; gap: 16px; align-items: end; }
+  label { display: block; font-size: 14px; color: var(--grey); margin-bottom: 4px; }
+  select { width: 100%; padding: 8px; border: 1px solid var(--ink); border-radius: 2px; background: var(--paper); color: var(--ink); font-size: 14px; }
+  select:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  #compare-button { padding: 12px 32px; border: 2px solid var(--ink); border-radius: 2px; background: var(--ink); color: var(--paper); font-size: 16px; font-weight: 700; cursor: pointer; }
+  #compare-button:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
+  #compare-button:active:not(:disabled) { background: var(--ink); color: var(--paper); }
+  #compare-button:disabled { background: transparent; color: var(--grey); border-color: var(--grey); cursor: wait; }
+  #records-note { margin-top: 16px; color: var(--grey); font-size: 14px; }
+
+  #diff-result { border-top: 2px solid var(--ink); padding-top: 16px; }
+  #diff-summary { font: 700 32px/1.1 var(--display); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  #diff-warnings p { margin: 8px 0 0; font-size: 14px; color: var(--grey); text-decoration: underline dotted; text-underline-offset: 4px; }
+  #diff-gate { margin-top: 16px; font-weight: 700; color: var(--fail); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+  #diff-ok { margin-top: 16px; font-weight: 700; }
+  #diff-ok::before { content: "\2713\00a0"; }
+  #diff-lines { margin-top: 16px; color: var(--grey); font-size: 14px; font-variant-numeric: tabular-nums; }
+  #diff-lines p { margin: 4px 0; }
+  .diff-heading { margin: 32px 0 8px; font: 700 14px/1.5 var(--body); }
+  .diff-heading.broken { color: var(--fail); }
+  .diff-heading.still { color: var(--grey); }
+  .diff-row { padding: 8px 0; border-top: 1px solid var(--rule); }
+  .diff-row .who { font-weight: 700; }
+  .diff-row .why { display: block; margin-top: 4px; font-size: 14px; color: var(--grey); }
+  .diff-row.broken .who { color: var(--fail); }
+  .diff-row.broken .why { color: var(--ink); font-style: italic; }
+  .diff-row.fixed .who::before { content: "\2713\00a0"; }
+  .diff-row.broken .who::before { content: "\2715\00a0"; }
+  #diff-notes p { margin: 16px 0 0; font-size: 14px; color: var(--grey); }
+
+  /* O5: the bake off. A winner is bold, wrapped in mark and says "best": never colour alone. */
+  #bakeoff-open { padding: 12px 32px; border: 2px solid var(--ink); border-radius: 2px; background: var(--ink); color: var(--paper); font-size: 16px; font-weight: 700; cursor: pointer; }
+  #bakeoff-open:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
+  #bakeoff-open:active:not(:disabled) { background: var(--ink); color: var(--paper); }
+  #bakeoff-open:disabled { background: transparent; color: var(--grey); border-color: var(--grey); cursor: wait; }
+  #bakeoff-result { border-top: 2px solid var(--ink); padding-top: 16px; margin-bottom: 32px; }
+  #bakeoff-simulated { display: inline-block; margin: 0 0 8px; padding: 0 8px; border: 1px solid var(--ink); font: 700 14px/24px var(--body); letter-spacing: .04em; text-transform: uppercase; }
+  #bakeoff-recommendation { font: 700 26px/1.2 var(--display); letter-spacing: -.01em; }
+  #bakeoff-labels, #bakeoff-note { margin-top: 8px; font-size: 14px; color: var(--grey); }
+  #bakeoff-scroll { margin-top: 16px; overflow-x: auto; }
+  #bakeoff-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  #bakeoff-table th, #bakeoff-table td { padding: 8px 16px 8px 0; text-align: left; border-top: 1px solid var(--rule); vertical-align: baseline; }
+  #bakeoff-table thead th { border-top: 0; border-bottom: 2px solid var(--ink); font: 700 16px/1.5 var(--body); }
+  #bakeoff-table tbody th { font-weight: 400; color: var(--grey); font-size: 14px; min-width: 150px; }
+  .cell.best { font-weight: 700; }
+  .cell .best-word { margin-left: 8px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .cell.bad { color: var(--fail); font-weight: 700; }
+  mark { background: var(--mark); color: var(--ink); padding: 0 4px; }
+  .dis-heading { margin: 24px 0 8px; font: 700 14px/1.5 var(--body); }
+  .dis-row { padding: 8px 0; border-top: 1px solid var(--rule); }
+  .dis-id { font-weight: 700; margin-right: 16px; }
+  .dis-link { margin: 4px 8px 4px 0; padding: 4px 12px; border: 1px solid var(--ink); border-radius: 2px; background: var(--paper); color: var(--ink); font-size: 14px; cursor: pointer; }
+  .dis-link:hover { background: var(--ink); color: var(--paper); }
+  .dis-link:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .dis-link[aria-expanded="true"] { font-weight: 700; text-decoration: underline; }
+  .dis-error { margin-top: 8px; font-size: 14px; font-weight: 700; color: var(--fail); }
+  .dis-transcript { margin-top: 8px; padding: 8px 0 8px 16px; border-left: 2px solid var(--ink); font-size: 14px; }
+  .dis-transcript .dis-title { font-weight: 700; }
+  .dis-transcript .dis-reason { color: var(--grey); margin-bottom: 4px; }
+  .dis-transcript .turn { padding: 4px 0; overflow-wrap: anywhere; }
+  .dis-transcript .turn .who { font-weight: 700; margin-right: 8px; color: var(--grey); }
+  .dis-transcript .turn.assistant .who { color: var(--ink); }
+
+  @media (max-width: 760px) {
+    header { padding: 16px 16px 8px; }
+    #records-error { padding: 8px 16px; }
+    main { padding: 8px 16px 48px; }
+    .pick { grid-template-columns: minmax(0, 1fr); }
+    #compare-button { width: 100%; }
+    #diff-summary { font-size: 26px; }
+    #bakeoff-open { width: 100%; }
+    #bakeoff-recommendation { font-size: 22px; }
+    #bakeoff-scroll::before { content: "Table scrolls sideways: the last column is off screen."; display: block; position: sticky; left: 0; width: 358px; max-width: 100%; margin-bottom: 4px; font-size: 12px; color: var(--grey); }
+    #bakeoff-table tbody th { min-width: 104px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Run records</h1>
+    <div class="tagline">Pick two saved runs. See who broke and who got fixed. Newly broken callers come first.</div>
+  </div>
+  <a id="dashboard-link" href="/">Back to the dashboard</a>
+</header>
+<div id="records-error" role="alert" hidden></div>
+
+<main>
+  <div class="panel">
+    <h2>Compare two runs</h2>
+    <div class="pick">
+      <div><label for="old-select">Earlier run (before)</label><select id="old-select"></select></div>
+      <div><label for="new-select">Later run (after)</label><select id="new-select"></select></div>
+      <button id="compare-button" type="button">Compare</button>
+    </div>
+    <div id="records-note"></div>
+  </div>
+
+  <div class="panel" id="bakeoff-panel" hidden>
+    <h2>Open a bake off</h2>
+    <div class="pick">
+      <div><label for="bakeoff-select">Saved bake off (one prompt or model per column)</label><select id="bakeoff-select"></select></div>
+      <div></div>
+      <button id="bakeoff-open" type="button">Open</button>
+    </div>
+  </div>
+
+  <div id="bakeoff-result" hidden>
+    <div id="bakeoff-simulated" hidden></div>
+    <div id="bakeoff-recommendation"></div>
+    <div id="bakeoff-labels"></div>
+    <div id="bakeoff-note"></div>
+    <div id="bakeoff-scroll"><table id="bakeoff-table"></table></div>
+    <div id="bakeoff-disagreements"></div>
+  </div>
+
+  <div id="diff-result" hidden>
+    <div class="panel">
+      <div id="diff-summary"></div>
+      <div id="diff-warnings"></div>
+      <div id="diff-gate" hidden></div>
+      <div id="diff-ok" hidden></div>
+      <div id="diff-lines"></div>
+    </div>
+    <div class="panel">
+      <div id="diff-list"></div>
+      <div id="diff-notes"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  function $(id) { return document.getElementById(id); }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) { node.className = className; }
+    if (text !== undefined && text !== null) { node.textContent = text; }
+    return node;
+  }
+
+  function clear(node) {
+    while (node.firstChild) { node.removeChild(node.firstChild); }
+  }
+
+  function percent(rate) { return Math.round(rate * 100) + '%'; }
+
+  function fetchJson(url) {
+    return fetch(url).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: response.ok, status: response.status, body: body };
+      });
+    });
+  }
+
+  function showError(message) {
+    var box = $('records-error');
+    box.textContent = message || 'Something went wrong.';
+    box.hidden = false;
+  }
+
+  function clearError() {
+    $('records-error').hidden = true;
+    $('records-error').textContent = '';
+  }
+
+  // ---- the two pickers -----------------------------------------------------
+
+  function label(row) {
+    var rate = typeof row.pass_rate === 'number' ? ' ' + percent(row.pass_rate) : '';
+    return row.name + '  (' + (row.agent || 'unknown agent') + ', ' + (row.set || '?') + ' set, pass^'
+      + (row.repeats || 1) + rate + (row.synthetic ? ', synthetic' : '') + ')';
+  }
+
+  function fillSelect(select, rows, chosen) {
+    clear(select);
+    rows.forEach(function (row) {
+      var option = el('option', '', label(row));
+      option.value = row.name;
+      select.appendChild(option);
+    });
+    select.value = chosen;
+  }
+
+  function loadListing() {
+    return fetchJson('/api/records').then(function (result) {
+      if (!result.ok) { throw new Error('Could not load /api/records'); }
+      // The diff pickers take run records only (newest first); bake offs (kind compare) have their own picker.
+      var all = result.body || [];
+      var rows = all.filter(function (row) { return row.kind === 'run'; });
+      var bakeoffs = all.filter(function (row) { return row.kind === 'compare'; });
+      $('bakeoff-panel').hidden = bakeoffs.length === 0;
+      if (bakeoffs.length) { fillSelect($('bakeoff-select'), bakeoffs, bakeoffs[0].name); }
+      $('compare-button').disabled = rows.length === 0;
+      if (rows.length === 0) {
+        $('records-note').textContent = 'No run records yet. Finish a run on the dashboard, or run the eval command.';
+        return;
+      }
+      fillSelect($('new-select'), rows, rows[0].name);
+      fillSelect($('old-select'), rows, (rows[1] || rows[0]).name);
+      $('records-note').textContent = rows.length + ' records, newest first. Synthetic means offline rule based agents.';
+    }).catch(function (err) {
+      showError(err.message);
+    });
+  }
+
+  // ---- the diff, same rules as `python -m callqa diff` ----------------------
+
+  function passes(record) {
+    var out = {};
+    (record.calls || []).forEach(function (call) {
+      out[call.persona_id] = call.repeats_passed === call.repeats_total;
+    });
+    return out;
+  }
+
+  function callById(record) {
+    var out = {};
+    (record.calls || []).forEach(function (call) { out[call.persona_id] = call; });
+    return out;
+  }
+
+  function rateOf(record) { return record.total ? record.passed / record.total : 0; }
+
+  function words(record) {
+    return (record.agent.label || record.agent.id) + ' pass^' + record.repeats + ' ' + percent(rateOf(record))
+      + ' (' + record.passed + '/' + record.total + ')';
+  }
+
+  function compare(older, newer) {
+    var before = passes(older), after = passes(newer);
+    var shared = Object.keys(before).filter(function (id) { return id in after; }).sort();
+    return {
+      broken: shared.filter(function (id) { return before[id] && !after[id]; }),
+      fixed: shared.filter(function (id) { return !before[id] && after[id]; }),
+      still: shared.filter(function (id) { return !before[id] && !after[id]; }),
+      added: Object.keys(after).filter(function (id) { return !(id in before); }).sort(),
+      removed: Object.keys(before).filter(function (id) { return !(id in after); }).sort()
+    };
+  }
+
+  function mismatchWarnings(older, newer) {
+    var out = [];
+    var a = older.persona_set || {}, b = newer.persona_set || {};
+    if (a.name !== b.name) {
+      out.push('Persona sets differ (' + a.name + ' vs ' + b.name + '), results are not comparable.');
+    } else if (a.ids_sha256 !== b.ids_sha256) {
+      out.push('The ' + b.name + ' persona set has different callers in the two records.');
+    }
+    if (older.repeats !== newer.repeats) { out.push('Repeats differ (' + older.repeats + ' vs ' + newer.repeats + ').'); }
+    if ((older.backend || {}).name !== (newer.backend || {}).name) {
+      out.push('Backends differ (' + (older.backend || {}).name + ' vs ' + (newer.backend || {}).name + ').');
+    }
+    return out;
+  }
+
+  function deltaLines(older, newer) {
+    var out = [];
+    var oc = older.cost, nc = newer.cost, ol = older.latency, nl = newer.latency;
+    if (oc && nc && typeof oc.per_call === 'number' && typeof nc.per_call === 'number') {
+      out.push('Cost per call (' + nc.label + ') $' + oc.per_call.toFixed(4) + ' to $' + nc.per_call.toFixed(4));
+    }
+    if (ol && nl && typeof ol.p95_ms === 'number' && typeof nl.p95_ms === 'number') {
+      out.push('P95 agent turn (' + nl.label + ') ' + ol.p95_ms + ' ms to ' + nl.p95_ms + ' ms');
+    }
+    return out;
+  }
+
+  function addGroup(list, kind, title, ids, record) {
+    if (ids.length === 0) { return; }
+    var calls = callById(record);
+    list.appendChild(el('div', 'diff-heading ' + kind, title + ' (' + ids.length + ')'));
+    ids.forEach(function (id) {
+      var call = calls[id] || {};
+      var row = el('div', 'diff-row ' + kind);
+      row.appendChild(el('span', 'who', id + (call.name ? ', ' + call.name : '')));
+      var why = kind === 'fixed' ? 'passes every repeat now' : (call.reason || '');
+      if (why) { row.appendChild(el('span', 'why', why)); }
+      list.appendChild(row);
+    });
+  }
+
+  function note(box, title, ids) {
+    if (ids.length) { box.appendChild(el('p', '', title + ' (' + ids.length + '): ' + ids.join(', '))); }
+  }
+
+  function render(older, newer) {
+    var d = compare(older, newer);
+    var points = Math.round((rateOf(newer) - rateOf(older)) * 100);
+    $('diff-summary').textContent = words(older) + ' to ' + words(newer) + ', ' + (points > 0 ? '+' : '') + points
+      + ' pts';
+
+    var warnings = $('diff-warnings');
+    clear(warnings);
+    mismatchWarnings(older, newer).forEach(function (line) { warnings.appendChild(el('p', '', line)); });
+
+    var gate = $('diff-gate'), ok = $('diff-ok');
+    gate.hidden = d.broken.length === 0;
+    ok.hidden = d.broken.length !== 0;
+    gate.textContent = d.broken.length + ' previously passing ' + (d.broken.length === 1 ? 'caller now fails' : 'callers now fail')
+      + ': ' + d.broken.join(', ');
+    ok.textContent = 'No previously passing caller fails.';
+
+    var lines = $('diff-lines');
+    clear(lines);
+    deltaLines(older, newer).forEach(function (line) { lines.appendChild(el('p', '', line)); });
+
+    // Newly broken first, in red; then fixed; then callers that fail in both.
+    var list = $('diff-list');
+    clear(list);
+    addGroup(list, 'broken', 'NEWLY BROKEN', d.broken, newer);
+    addGroup(list, 'fixed', 'FIXED', d.fixed, newer);
+    addGroup(list, 'still', 'STILL FAILING', d.still, newer);
+
+    var notes = $('diff-notes');
+    clear(notes);
+    note(notes, 'ADDED', d.added);
+    note(notes, 'REMOVED', d.removed);
+    $('diff-result').hidden = false;
+  }
+
+  function loadRecord(name) {
+    return fetchJson('/api/records/' + encodeURIComponent(name)).then(function (result) {
+      if (!result.ok) { throw new Error((result.body && result.body.error) || ('Could not load ' + name)); }
+      return result.body;
+    });
+  }
+
+  function onCompare() {
+    clearError();
+    var oldName = $('old-select').value, newName = $('new-select').value;
+    $('compare-button').disabled = true;
+    loadRecord(oldName).then(function (older) {
+      return loadRecord(newName).then(function (newer) { render(older, newer); });
+    }).catch(function (err) {
+      $('diff-result').hidden = true;
+      showError(err.message);
+    }).then(function () {
+      $('compare-button').disabled = false;
+    });
+  }
+
+  // ---- the bake off: one column per config, the winner of each row marked by form ----
+
+  var METRICS = [
+    { key: 'pass', cls: 'm-pass', title: function (r) { return 'pass^' + (r.repeats || 1) + ' (higher is better)'; },
+      show: function (c) { return c.total ? percent(c.passed / c.total) + ' (' + c.passed + ' of ' + c.total + ')' : 'n/a'; } },
+    { key: 'critical', cls: 'm-critical', title: function () { return 'Critical compliance failures (lower is better)'; },
+      show: function (c) { return typeof c.critical === 'number' ? String(c.critical) : 'n/a'; },
+      bad: function (c) { return c.critical > 0; } },
+    { key: 'escalation', cls: 'm-escalation', title: function () { return 'Escalation accuracy (higher is better)'; },
+      show: function (c) {
+        return c.escalation_runs ? percent(c.escalation_right / c.escalation_runs) + ' (' + c.escalation_right + ' of '
+          + c.escalation_runs + ')' : 'n/a';
+      } },
+    { key: 'cost', cls: 'm-cost', title: function () { return 'Cost per call (lower is better)'; },
+      show: function (c) { return typeof c.cost_per_call === 'number' ? '$' + c.cost_per_call.toFixed(4) : 'n/a'; } },
+    { key: 'p95', cls: 'm-p95', title: function () { return 'P95 agent turn (lower is better)'; },
+      show: function (c) { return typeof c.p95_ms === 'number' ? c.p95_ms + ' ms' : 'n/a'; } }
+  ];
+
+  function buildTable(record) {
+    var table = $('bakeoff-table');
+    clear(table);
+    var configs = record.configs || [];
+    var best = record.best || {};
+    var head = el('tr');
+    head.appendChild(el('th', 'metric', 'Measure'));
+    configs.forEach(function (c) { head.appendChild(el('th', 'config', c.config)); });
+    var thead = el('thead');
+    thead.appendChild(head);
+    table.appendChild(thead);
+    var body = el('tbody');
+    METRICS.forEach(function (metric) {
+      var row = el('tr', 'metric ' + metric.cls);
+      row.appendChild(el('th', 'rowhead', metric.title(record)));
+      var winners = best[metric.key] || [];
+      configs.forEach(function (c) {
+        var isBest = winners.indexOf(c.config) !== -1;
+        var cell = el('td', 'cell' + (isBest ? ' best' : '') + (metric.bad && metric.bad(c) ? ' bad' : ''));
+        if (isBest) {
+          cell.appendChild(el('mark', '', metric.show(c)));
+          cell.appendChild(el('span', 'best-word', 'best'));
+        } else {
+          cell.textContent = metric.show(c);
+        }
+        row.appendChild(cell);
+      });
+      body.appendChild(row);
+    });
+    table.appendChild(body);
+  }
+
+  function findCall(record, personaId) {
+    var calls = (record && record.calls) || [];
+    for (var i = 0; i < calls.length; i += 1) {
+      if (calls[i].persona_id === personaId) { return calls[i]; }
+    }
+    return null;
+  }
+
+  function transcriptBlock(config, personaId, call) {
+    var box = el('div', 'dis-transcript');
+    box.appendChild(el('div', 'dis-title', config.config + ': ' + (call.passed ? 'passes' : 'fails') + ' ' + personaId));
+    if (call.reason) { box.appendChild(el('div', 'dis-reason', call.reason)); }
+    (call.transcript || []).forEach(function (turn) {
+      var line = el('div', 'turn ' + (turn.role === 'assistant' ? 'assistant' : 'user'));
+      line.appendChild(el('span', 'who', turn.role === 'assistant' ? 'Agent' : 'Caller'));
+      line.appendChild(el('span', 'text', turn.content));
+      box.appendChild(line);
+    });
+    return box;
+  }
+
+  function openTranscript(config, personaId, link, holder) {
+    var shown = holder.shown[config.config];
+    if (shown) {  // a second click closes it
+      holder.node.removeChild(shown);
+      delete holder.shown[config.config];
+      link.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    function show(box) {
+      holder.shown[config.config] = box;
+      holder.node.appendChild(box);
+      link.setAttribute('aria-expanded', 'true');
+    }
+    loadRecord(config.run_file).then(function (record) {
+      var call = findCall(record, personaId);
+      if (!call) { throw new Error(personaId + ' is not in this run file'); }
+      show(transcriptBlock(config, personaId, call));
+    }).catch(function (err) {
+      show(el('div', 'dis-error', config.config + ': could not show ' + personaId + ' from ' + config.run_file + ' ('
+        + err.message + ')'));
+    });
+  }
+
+  function buildDisagreements(record) {
+    var box = $('bakeoff-disagreements');
+    clear(box);
+    var ids = record.disagreements || [];
+    if (!ids.length) {
+      box.appendChild(el('div', 'dis-heading', 'No caller got different results across the configs.'));
+      return;
+    }
+    box.appendChild(el('div', 'dis-heading', 'Callers the configs disagree on (' + ids.length
+      + '). Open a transcript from each config.'));
+    ids.forEach(function (id) {
+      var row = el('div', 'dis-row');
+      row.appendChild(el('span', 'dis-id', id));
+      var holder = { node: el('div', 'dis-open'), shown: {} };
+      (record.configs || []).forEach(function (config) {
+        var link = el('button', 'dis-link', config.config + ' transcript');
+        link.type = 'button';
+        link.setAttribute('aria-expanded', 'false');
+        link.addEventListener('click', function () { openTranscript(config, id, link, holder); });
+        row.appendChild(link);
+      });
+      row.appendChild(holder.node);
+      box.appendChild(row);
+    });
+  }
+
+  function renderBakeoff(record) {
+    var rec = record.recommendation || {};
+    $('bakeoff-simulated').textContent = 'Simulated: offline rule based agents, so cost and latency are not measured';
+    $('bakeoff-simulated').hidden = record.simulated !== true;
+    $('bakeoff-recommendation').textContent = rec.text || '';
+    $('bakeoff-labels').textContent = 'Cost per call: ' + (record.cost_label || 'unknown') + '. Latency: '
+      + (record.latency_label || 'unknown') + '. pass^' + (record.repeats || 1) + ' over '
+      + ((record.persona_set || {}).count || '?') + ' callers.';
+    $('bakeoff-note').textContent = record.note || '';
+    buildTable(record);
+    buildDisagreements(record);
+    $('bakeoff-result').hidden = false;
+  }
+
+  function onOpenBakeoff() {
+    clearError();
+    $('bakeoff-open').disabled = true;
+    loadRecord($('bakeoff-select').value).then(renderBakeoff).catch(function (err) {
+      $('bakeoff-result').hidden = true;
+      showError(err.message);
+    }).then(function () {
+      $('bakeoff-open').disabled = false;
+    });
+  }
+
+  $('bakeoff-open').addEventListener('click', onOpenBakeoff);
+  $('compare-button').addEventListener('click', onCompare);
+  loadListing();
+})();
+</script>
+</body>
+</html>

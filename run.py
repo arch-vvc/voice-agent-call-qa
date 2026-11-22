@@ -1,11 +1,10 @@
 """Run the Call QA demo: serve the dashboard, or check it from the terminal.
 
-    python run.py                              serve the dashboard on http://127.0.0.1:8000
-    python run.py --smoke                      offline self check, prints SMOKE OK ...
-    python run.py --check --backend offline    before and after run, exits 1 if the fix does not help
-    python run.py --summarise results/live     table of the live runs saved in that folder
+    python demos/call-qa/run.py                              serve the dashboard on http://127.0.0.1:8000
+    python demos/call-qa/run.py --smoke                      offline self check, prints SMOKE OK ...
+    python demos/call-qa/run.py --check --backend offline    before and after run, exits 1 if the fix does not help
 
-Same as `python -m callqa`. Every option is listed by --help.
+Same as `python -m callqa` from inside demos/call-qa. Every option is listed by --help.
 """
 import sys
 from pathlib import Path
