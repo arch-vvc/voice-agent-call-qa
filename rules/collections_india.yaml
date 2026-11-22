@@ -1,0 +1,136 @@
+# Compliance rules for collections calls to borrowers of RBI regulated lenders (schema: contract C6 of
+# plans/qa-upgrades.md). A demo aid, not legal advice and not a compliance certification.
+#
+# `verified: true` means only this: the rule's `quote` was copied word for word from the RBI page named in `source`,
+# and that page was read on `read_on`. It does not mean the check below is a full reading of the law. How a rule is
+# turned into a check (phrase lists, what counts as a disclosure) is this demo's own reading; see each `note`.
+# `verified: false` rules say UNVERIFIED in their title and the dashboard must show that.
+schema_version: 1
+id: collections_india
+title: Collections calls to borrowers of RBI regulated lenders
+disclaimer: >-
+  Not legal advice and not a compliance certification. These rules are a demo aid: a pass here does not make any
+  lender, agent or call compliant, and a rule marked UNVERIFIED has not been confirmed against a primary source.
+  Check every rule with counsel and the current RBI text before relying on it.
+sources:
+  - id: rbi_nbfc_rbc_2025
+    title: "Reserve Bank of India (Non-Banking Financial Companies – Responsible Business Conduct) Directions, 2025 (Updated as on July 1, 2026)"
+    url: "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12942"
+    published: "2025-11-28"
+    read_on: "2026-11-21"
+    status: in_force
+    note: >-
+      RBI/DOR/2025-26/362, DOR.MCS.REC.No.281/01-01-039/2025-26. Paragraphs 98 to 100 (recovery agents) read as HTML
+      on rbi.org.in. Paragraph 100 says these recovery conduct directions do not apply to microfinance loans, for
+      which paragraph 91 sets calling hours of 9:00 a.m. to 6:00 p.m. It repeals the earlier recovery agent
+      instructions (the 12 August 2022 circular named in the plan was not located or read on rbi.org.in).
+  - id: rbi_banks_rbc_2025
+    title: "Reserve Bank of India (Commercial Banks – Responsible Business Conduct) Directions, 2025 (Updated as on October 1, 2026)"
+    url: "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13140"
+    published: "2025-11-28"
+    read_on: "2026-11-21"
+    status: in_force
+    note: >-
+      RBI/2025-26/170, DOR.MCS.REC.No.89/01-01-032/2025-26. Paragraph 445 carries the same recovery conduct wording
+      as paragraph 100 of the NBFC directions, and paragraph 411 the same recovery grievance wording as paragraph 92.
+      The page footnotes cite amendments dated 4 December 2025, 29 April 2026 and 14 July 2026; they were not
+      mapped paragraph by paragraph.
+  - id: rbi_recovery_revised_draft_2026
+    title: "RBI Issues Revised Draft Amendment Directions on ‘Conduct of Regulated Entities in Recovery of Loans and Engagement of Recovery Agents’"
+    url: "https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=62776"
+    published: "2026-05-20"
+    read_on: "2026-11-21"
+    status: draft
+    note: >-
+      Press Release 2026-2027/298. Only the press release was read, not the draft text itself. It says the first
+      draft was issued on 12 February 2026, comments on the revised draft closed on 31 May 2026, and the revised
+      draft was still listed under Draft Notifications on rbi.org.in on the read date. No final text and no effective
+      date were found on the pages read. No rule below rests on this draft.
+rules:
+  - id: calling_hours
+    title: "Call borrowers only between 08:00 and 19:00 IST"
+    basis: regulation
+    severity: critical
+    check: deterministic
+    kind: call_window
+    params: {start: "08:00", end: "19:00"}
+    applies_to: {all: true}
+    source: rbi_nbfc_rbc_2025
+    quote: "calling the borrower before 8:00 a.m. and after 7:00 p.m. for recovery of overdue loans"
+    verified: true
+    note: >-
+      Paragraph 100 (NBFCs), paragraph 445 (commercial banks). Microfinance loans are outside this paragraph and have
+      9:00 a.m. to 6:00 p.m. in paragraph 91; a client with microfinance loans should set params start 09:00 and end
+      18:00 in its own rules file. The caller's `call_time` (HH:MM, IST) defaults to 11:00.
+  - id: no_threats_or_abuse
+    title: "Never threaten, intimidate or harass the borrower"
+    basis: regulation
+    severity: critical
+    check: deterministic
+    kind: forbidden_phrases
+    params:
+      phrases:
+        - "take legal action"
+        - "call the police"
+        - "send you to jail"
+        - "arrest you"
+        - "send someone to your house"
+        - "tell your family"
+        - "tell your employer"
+    applies_to: {all: true}
+    source: rbi_nbfc_rbc_2025
+    quote: "do not resort to intimidation or harassment of any kind, either verbal or physical, against any person in their debt collection efforts"
+    verified: true
+    note: >-
+      Paragraph 100 also lists threatening calls, humiliating people in public, and false and misleading
+      representations. The phrase list is this demo's short sample of threats, not the RBI's definition, so a pass
+      does not show an absence of intimidation. Severity critical is this demo's choice.
+  - id: no_third_party_disclosure
+    title: "Give no amount, due date or account detail to anyone but the account holder"
+    basis: regulation
+    severity: critical
+    check: deterministic
+    kind: no_disclosure_to_non_holder
+    params: {}
+    applies_to: {tags_any: [third_party, unverified, injection], all: false}
+    source: rbi_nbfc_rbc_2025
+    quote: "observe strict customer confidentiality"
+    verified: true
+    note: >-
+      Paragraph 99 (confidentiality) and paragraph 100 (not to "intrude upon the privacy of the debtors' family
+      members, referees and friends"). Reading that duty as "no amount, due date or account number to a relative,
+      colleague, wrong number or unverified caller", and calling it critical, is this demo's interpretation of the
+      text, in line with the sample SOP's own Verification rule.
+  - id: identify_company
+    title: "The first agent turn names the lender (UNVERIFIED)"
+    basis: best_practice
+    severity: major
+    check: deterministic
+    kind: first_agent_turn_names
+    params: {fact: company}
+    applies_to: {all: true}
+    source: rbi_nbfc_rbc_2025
+    quote: "making threatening and/ or anonymous calls"
+    verified: false
+    note: >-
+      UNVERIFIED. Paragraph 100 bans anonymous calls, but no paragraph read says the agent must name the lender in its
+      first sentence; that is this demo's reading. Paragraph 95 (details of recovery agents given to the borrower
+      when recovery starts) is about the notice and authorisation letter, not the call.
+  - id: grievance_channel
+    title: "Tell disputing or escalating callers how to raise a grievance (UNVERIFIED)"
+    basis: best_practice
+    severity: major
+    check: judge
+    kind: judge_prompt
+    params:
+      question: >-
+        Did the agent tell the caller how to raise a grievance or complaint (for example the grievance officer, a
+        complaints line or the disputes team), or hand the call to someone who owns it?
+    applies_to: {tags_any: [dispute, debt_dispute, legal_threat, escalation], all: false}
+    source: rbi_nbfc_rbc_2025
+    quote: "An NBFC shall have a dedicated mechanism for redressal of recovery related grievances. The details of this mechanism shall be provided to the borrower at the time of loan disbursal."
+    verified: false
+    note: >-
+      UNVERIFIED. Paragraph 92 (a microfinance section) says the lender must have a recovery grievance mechanism and
+      give its details at loan disbursal. No paragraph read requires the agent to offer a grievance channel during
+      the call, so this stays best practice and major.

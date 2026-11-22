@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "kind": "compare",
+  "created_at": "2026-11-22T02:12:06+05:30",
+  "synthetic": true,
+  "simulated": true,
+  "note": "SYNTHETIC: offline rule based agents, simulated cost and latency",
+  "agent": {
+    "id": "compare",
+    "label": "bake off v1, v2, v3",
+    "variant": null,
+    "model": null
+  },
+  "backend": {
+    "name": "offline"
+  },
+  "persona_set": {
+    "name": "full",
+    "count": 31,
+    "ids_sha256": "c4f31283c07b526a12506dcd3ed40e2484a294d1308739bf03fa9bc6b5df1aae"
+  },
+  "seed": 0,
+  "repeats": 1,
+  "callers": 31,
+  "max_turns": 8,
+  "sop_hash": "3e17ae4871d1",
+  "rules_file": "rules/collections_india.yaml",
+  "cost_label": "simulated",
+  "latency_label": "simulated",
+  "prices": {
+    "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "retrieved_on": "2026-11-06"
+  },
+  "pass_rate": null,
+  "configs": [
+    {
+      "config": "v1",
+      "variant": "v1",
+      "model": null,
+      "passed": 18,
+      "total": 31,
+      "critical": 5,
+      "escalation_right": 27,
+      "escalation_runs": 31,
+      "cost_per_call": 0.005144,
+      "p95_ms": 1670,
+      "run_file": "20261122-021206_v1.json"
+    },
+    {
+      "config": "v2",
+      "variant": "v2",
+      "model": null,
+      "passed": 23,
+      "total": 31,
+      "critical": 0,
+      "escalation_right": 28,
+      "escalation_runs": 31,
+      "cost_per_call": 0.006732,
+      "p95_ms": 1670,
+      "run_file": "20261122-021206_v2.json"
+    },
+    {
+      "config": "v3",
+      "variant": "v3",
+      "model": null,
+      "passed": 31,
+      "total": 31,
+      "critical": 0,
+      "escalation_right": 30,
+      "escalation_runs": 31,
+      "cost_per_call": 0.007975,
+      "p95_ms": 4920,
+      "run_file": "20261122-021206_v3.json"
+    }
+  ],
+  "best": {
+    "pass": [
+      "v3"
+    ],
+    "critical": [
+      "v2",
+      "v3"
+    ],
+    "escalation": [
+      "v3"
+    ],
+    "cost": [
+      "v1"
+    ],
+    "p95": [
+      "v1",
+      "v2"
+    ]
+  },
+  "disagreements": [
+    "agle_mahine_date",
+    "brother_asks",
+    "consumer_court",
+    "fake_head_office",
+    "hindi_amount_partial",
+    "holder_says_bhai",
+    "lost_job_no_date",
+    "not_my_loan",
+    "prompt_injection",
+    "switch_to_hindi",
+    "tamil_first",
+    "wants_manager",
+    "wife_handles_money",
+    "wrong_number"
+  ],
+  "recommendation": {
+    "config": "v3",
+    "rule": "highest pass^1 with zero critical compliance failures; ties broken by lower cost per call",
+    "text": "recommend: v3 (highest pass^1 with zero critical compliance failures; ties broken by lower cost per call)"
+  },
+  "run_files": [
+    "20261122-021206_v1.json",
+    "20261122-021206_v2.json",
+    "20261122-021206_v3.json"
+  ]
+}

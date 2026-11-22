@@ -13,7 +13,8 @@ import pytest
 
 from callqa import server
 from callqa.personas import generate_personas
-from callqa.server import make_server, run_check
+from callqa.runrecord import load_record
+from callqa.server import estimate_calls, make_server, run_check
 from evals import example_agent
 from evals.backends import BackendError, OfflineBackend
 
@@ -106,9 +107,9 @@ def run_to_end(base, agent="v1", sop=SOP):
 def start(tmp_path):
     servers = []
 
-    def _start(backend=None, callers=20, max_turns=8, workers=4, agents=None):
+    def _start(backend=None, callers=20, max_turns=8, workers=4, agents=None, **options):
         srv = make_server(backend or OfflineBackend(), callers, max_turns, workers,
-                          agents or DEFAULT_AGENTS, results_dir=tmp_path / "results")
+                          agents or DEFAULT_AGENTS, results_dir=tmp_path / "runs", **options)
         threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         servers.append(srv)
         return f"http://127.0.0.1:{srv.server_address[1]}", srv
@@ -352,16 +353,34 @@ def test_runs_history_has_before_and_after(start):
     assert body["status"] == "done" and post["run_id"] in [r["run_id"] for r in runs]
     assert [r["agent_label"] for r in runs] == ["v1 naive prompt", "v2 fixed prompt"]
     assert runs[0] == {"run_id": v1["run_id"], "sop_hash": v1["sop_hash"], "agent_label": "v1 naive prompt",
-                       "backend": "offline", "pass_rate": 0.7, "passed": 14, "total": 20}
+                       "backend": "offline", "pass_rate": 0.7, "passed": 14, "total": 20,
+                       "set": "story", "repeats": 1}
     assert runs[1]["pass_rate"] == 0.95
 
 
-def test_finished_run_is_saved_to_results_dir(start, tmp_path):
+def test_finished_run_is_saved_as_a_run_record(start, tmp_path):
     base, _ = start()
     report = run_to_end(base, "v1")["report"]
-    files = list((tmp_path / "results").glob("dashboard-*-v1.json"))
+    files = list((tmp_path / "runs").glob("*_v1.json"))
     assert len(files) == 1
-    assert json.loads(files[0].read_text(encoding="utf-8"))["run_id"] == report["run_id"]
+    assert load_record(files[0]) == report
+    assert report["schema_version"] == 1 and report["kind"] == "run" and report["synthetic"] is True
+    assert not (tmp_path / "results").exists()
+
+
+def test_record_says_story_and_synthetic_when_persona_generation_fell_back_to_templates(start):
+    base, _ = start(FakeBackend(gen=lambda system, messages: "not json at all"), allow_large=True)
+    report = run_to_end(base, "v1")["report"]
+    assert report["generator"]["source"].startswith("templates (LLM failed")
+    assert report["persona_set"]["name"] == "story" and report["synthetic"] is True
+
+
+def test_default_results_dir_is_runs_under_the_demo():
+    srv = make_server(OfflineBackend(), 20, 8, 4)
+    try:
+        assert srv.app.results_dir == ROOT / "runs"
+    finally:
+        srv.server_close()
 
 
 @pytest.mark.parametrize("body", [{"sop": "", "agent": "v1"}, {"sop": "   \n", "agent": "v1"}, {"agent": "v1"}])
@@ -547,3 +566,48 @@ def test_non_string_agent_is_400(start, agent):
 def test_server_module_never_imports_request_text():
     source = Path(server.__file__).read_text(encoding="utf-8")
     assert "import_module" not in source and "__import__" not in source and "eval(" not in source
+
+
+def test_estimated_calls_counts_repeats(start):
+    assert estimate_calls(5, 4) == 55
+    assert estimate_calls(5, 4, 3) == 165
+    base, _ = start(FakeBackend(), callers=5, max_turns=4, workers=2, repeats=3)
+    cfg = get_json(base, "/api/config")[1]
+    assert (cfg["set"], cfg["repeats"], cfg["estimated_calls"]) == ("story", 3, 165)
+
+
+def test_config_reports_the_full_set_size(start):
+    base, _ = start(set_name="full")
+    cfg = get_json(base, "/api/config")[1]
+    assert (cfg["set"], cfg["estimated_calls"]) == ("full", (2 * 8 + 3) * 31)
+
+
+def test_post_run_accepts_set_and_repeats(start):
+    base, _ = start()
+    status, text = request(base, "/api/run", {"sop": SOP, "agent": "v2", "set": "full", "repeats": 2})
+    assert status == 202, text
+    report = wait_finished(base, json.loads(text)["run_id"])["report"]
+    assert report["persona_set"]["name"] == "full" and report["repeats"] == 2
+    assert report["total"] == 31 and report["consistency"]["repeats"] == 2
+    assert len(report["calls"]) == 31 and report["calls"][0]["repeats_total"] == 2
+
+
+@pytest.mark.parametrize("extra", [
+    {"repeats": 0}, {"repeats": 6}, {"repeats": "3"}, {"repeats": 2.5}, {"repeats": True}, {"repeats": None},
+    {"set": "huge"}, {"set": 1},
+])
+def test_bad_repeats_is_400(start, extra):
+    base, _ = start()
+    status, text = request(base, "/api/run", {"sop": SOP, "agent": "v1", **extra})
+    assert status == 400, text
+    assert "error" in json.loads(text)
+
+
+def test_big_request_on_an_llm_backend_needs_yes_at_startup(start):
+    backend = FakeBackend()
+    base, _ = start(backend, callers=5, max_turns=4, workers=2)
+    status, text = request(base, "/api/run", {"sop": SOP, "agent": "v1", "set": "full", "repeats": 5})
+    assert status == 400 and "--yes" in text
+    assert backend.calls == []
+    base2, _ = start(FakeBackend(), callers=5, max_turns=4, workers=2, allow_large=True)
+    assert request(base2, "/api/run", {"sop": SOP, "agent": "v1", "set": "full", "repeats": 1})[0] == 202

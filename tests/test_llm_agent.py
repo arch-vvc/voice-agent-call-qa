@@ -35,7 +35,7 @@ def test_prompts_are_deterministic():
 
 def test_unknown_variant_raises():
     with pytest.raises(ValueError):
-        llm_agent.build_system_prompt(SOP, "v3")
+        llm_agent.build_system_prompt(SOP, "v4")
 
 
 def test_v1_prompt_opens_with_amount_date_and_account_number_and_has_no_verification_rule():

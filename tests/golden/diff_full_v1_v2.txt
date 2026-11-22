@@ -1,0 +1,8 @@
+DIFF full_v1 (v1) -> full_v2 (v2)  set=full personas=31 repeats=3 backend=offline
+NEWLY BROKEN (1): holder_says_bhai
+FIXED (6): brother_asks, fake_head_office, not_my_loan, prompt_injection, wife_handles_money, wrong_number
+STILL FAILING (8): agle_mahine_date, consumer_court, flaky_line, hindi_amount_partial, lost_job_no_date, switch_to_hindi, tamil_first, wants_manager
+pass^3 55% (17/31) -> 71% (22/31), +16 pts
+cost per call (simulated) $0.0051 -> $0.0067
+P95 agent turn (simulated) 1670 ms -> 1670 ms
+GATE FAILED: 1 previously passing persona now fails: holder_says_bhai

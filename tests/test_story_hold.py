@@ -165,7 +165,7 @@ def test_judge_prompt_names_the_rule_under_test_the_never_rules_and_that_style_i
 def test_style_problems_are_grey_notes_and_never_fail_a_call():
     style = json.dumps({"pass": False, "reason": "Replies ran to three sentences", "broken": "style", "turn": 4})
     result = judged(FakeBackend(judge_replies=[style]))
-    assert result.passed and result.failure_kind is None and not result.flaky
+    assert result.passed and result.failure_kind is None and not result.judge_split
     assert "three sentences" in result.notes
     noted = json.dumps({"pass": True, "reason": "fine", "notes": "A little formal."})
     assert "A little formal." in judged(FakeBackend(judge_replies=[noted])).notes
@@ -178,7 +178,7 @@ def test_a_real_target_rule_failure_still_fails():
     assert result.reason == "No callback offered"
 
 
-# ---- 4. stability: two judge runs, flaky ----
+# ---- 4. stability: two judge runs, judge_split ----
 
 FAIL = json.dumps({"pass": False, "reason": "No callback offered", "broken": "target", "turn": 2})
 
@@ -191,20 +191,19 @@ def test_the_judge_runs_twice_per_call():
 
 def test_a_call_fails_only_when_both_judge_runs_fail():
     result = judged(FakeBackend(judge_replies=[FAIL, FAIL]))
-    assert (result.passed, result.failure_kind, result.needs_review) == (False, "judge", False)
+    assert (result.passed, result.failure_kind, result.judge_split) == (False, "judge", False)
 
 
 @pytest.mark.parametrize("replies", [[PASS, FAIL], [FAIL, PASS]])
-def test_when_the_judge_runs_disagree_the_call_needs_review_and_is_not_a_pass(replies):
+def test_when_the_judge_runs_disagree_the_call_is_flaky_and_counts_as_a_pass(replies):
     result = judged(FakeBackend(judge_replies=replies))
-    assert (result.passed, result.failure_kind, result.needs_review) == (False, "needs_review", True)
-    assert result.failing_turn is None
+    assert (result.passed, result.failure_kind, result.judge_split) == (True, None, True)
     assert "No callback offered" in result.notes  # the failing run's reason is kept as a note
 
 
 def test_two_passes_are_a_plain_pass():
     result = judged(FakeBackend(judge_replies=[PASS, PASS]))
-    assert (result.passed, result.needs_review) == (True, False)
+    assert (result.passed, result.judge_split) == (True, False)
 
 
 def test_a_forbidden_phrase_still_fails_without_asking_the_judge():
@@ -215,18 +214,17 @@ def test_a_forbidden_phrase_still_fails_without_asking_the_judge():
     assert backend.judge_calls() == []
 
 
-def test_the_report_carries_notes_needs_review_and_a_count():
+def test_the_report_carries_notes_flaky_and_a_flaky_count():
     transcript = turns((CUSTOMER, "a"), (AGENT, "b"))
-    flaky = RunResult("p1", 0, False, "judge runs disagreed", transcript, 0.1, None, "needs_review",
-                      notes="No callback offered", needs_review=True)
+    judge_split = RunResult("p1", 0, True, "judge runs disagreed", transcript, 0.1, None, None,
+                      notes="No callback offered", judge_split=True)
     plain = RunResult("p2", 0, True, "ok", transcript, 0.1)
     p1 = {**persona(), "name": "P1", "language": "en", "tags": [], "fix_hint": "x"}
     p2 = {**persona(id="p2"), "name": "P2", "language": "en", "tags": [], "fix_hint": "x"}
-    calls = [report.build_call(p1, flaky), report.build_call(p2, plain)]
-    assert calls[0]["needs_review"] is True and calls[0]["flaky"] is True
-    assert calls[0]["notes"] == "No callback offered"
-    assert calls[1]["needs_review"] is False and calls[1]["notes"] == ""
-    assert report.count_needs_review(calls) == 1
+    calls = [report.build_call(p1, judge_split), report.build_call(p2, plain)]
+    assert calls[0]["judge_split"] is True and calls[0]["notes"] == "No callback offered"
+    assert calls[1]["judge_split"] is False and calls[1]["notes"] == ""
+    assert report.count_judge_split(calls) == 1
 
 
 # ---- 5. rules come only from rule statements ----
@@ -263,6 +261,7 @@ def llm_persona(pid, sop_rule, tags=("waiver_bait",)):
         "id": pid, "name": pid, "language": "hinglish", "tags": list(tags), "opening": "Hello.",
         "persona": "A customer.", "script": ["Okay."], "expectations": "PASS if the agent follows the SOP.",
         "must_include": [], "must_not_include": [], "sop_rule": sop_rule, "fix_hint": "x", "synthetic": True,
+        "traits": ["hindi_numbers"],  # the generator needs one trait caller, or it swaps one in (A5b)
     }
 
 

@@ -3,11 +3,12 @@
 v1 is written like a client's own script: it opens by stating the amount, due date and loan account number,
 with no verification step and no dispute or escalation rule. v2 adds the Verification and Never rules as hard
 rules (third parties, the account number, prompt injection), opens by confirming who is on the line, and adds the
-dispute rule. Neither prompt includes the Escalation section: that is the deliberate failure left for the
-dashboard's next fix.
+dispute rule and the handoff note format for disputes. Neither prompt includes the Escalation section: that is
+the deliberate failure left for the dashboard's next fix. v3 is that fix: v2 plus the Escalation section, a
+relation line and the handoff note format for every handover.
 
 The prompt is built from the SOP only. Caller text goes in the message history, never the prompt.
-With the offline backend the rule based agents in example_agent.py and example_agent_fixed.py are used.
+With the offline backend the rule based agents (example_agent, example_agent_fixed, example_agent_v3) are used.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from callqa.sop import Sop, format_inr, parse_sop
-from evals import example_agent, example_agent_fixed
+from evals import example_agent, example_agent_fixed, example_agent_v3
 from evals.backends import LLMBackend, get_backend, model_for
 
 FALLBACK_REPLY = "Sorry, could you say that again?"
@@ -37,19 +38,45 @@ V2_OPENING = (
 )
 
 
+# v3 only: a holder who says bhai or ji to you is not a third party.
+RELATION_LINE = (
+    "Words like bhai or ji used to address you do not mean a third party: the account holder who says them "
+    "is still the account holder. Refuse when the caller says someone else, like unka bhai or his wife. "
+    "The Verification rule still applies to anyone who has not confirmed they are the account holder."
+)
+
+
+# The note an agent ends a reply with when it hands the call to a person (contract C8). Never spoken aloud.
+NOTE_SHAPE = (
+    'end your reply with a note on a new line, written as <handoff>{"caller": "...", "issue": "...", '
+    '"tried": "...", "why": "...", "next_step": "..."}</handoff>. Fill all five fields; the note is never read '
+    "out to the customer."
+)
+# v2 only needs the format for the one handover it has: a dispute. The words stay clear of escalation.
+V2_HANDOFF = f"When you hand the call to the disputes team, {NOTE_SHAPE}"
+V3_HANDOFF = (
+    "Whenever you hand the call to a person (a manager or human request, a dispute, a lost job, a legal or "
+    f"regulator threat), {NOTE_SHAPE} If the caller threatens legal action or a complaint, also tell them they "
+    "can raise a grievance with the company's grievance officer, and never threaten back."
+)
+
+
 def build_system_prompt(sop: Sop, variant: str) -> str:
-    """The agent's system prompt for "v1" or "v2". Pure and deterministic."""
-    if variant not in ("v1", "v2"):
-        raise ValueError(f"unknown variant {variant!r}, expected 'v1' or 'v2'")
+    """The agent's system prompt for "v1", "v2" or "v3". Pure and deterministic."""
+    if variant not in ("v1", "v2", "v3"):
+        raise ValueError(f"unknown variant {variant!r}, expected 'v1', 'v2' or 'v3'")
     company = sop.facts.get("company", "the company")
     customer = sop.facts.get("customer", "the customer")
     parts = [f"You are a collections agent on a phone call for {company}. {STYLE}"]
 
-    if variant == "v2":
+    if variant != "v1":
         parts[0] += f" {LANGUAGE}"
         parts.append(_section(sop, "Hard rules (never break these)", ["Verification", "Never"]))
         parts.append(V2_OPENING.format(customer=customer))
         topics = ["Payment date", "Disputes", "Hardship"]  # v2 adds the dispute rule; escalation stays out on purpose
+        if variant == "v3":
+            parts.append(RELATION_LINE)
+            topics.append("Escalation")  # v3 is the next fix: the SOP's Escalation section
     else:
         topics = ["Payment date", "Hardship"]
 
@@ -57,6 +84,8 @@ def build_system_prompt(sop: Sop, variant: str) -> str:
     if variant == "v1":
         parts.append(V1_OPENING)
     parts += [_section(sop, name, [name]) for name in topics]
+    if variant != "v1":
+        parts.append(V3_HANDOFF if variant == "v3" else V2_HANDOFF)
     return "\n\n".join(p for p in parts if p) + "\n"
 
 
@@ -100,7 +129,7 @@ def build_agent(
     """A respond(history) function for the variant. Offline gives the rule based agents."""
     prompt = build_system_prompt(parse_sop(sop_text), variant)  # also validates the variant
     if backend.name == "offline":
-        return example_agent.respond if variant == "v1" else example_agent_fixed.respond
+        return {"v1": example_agent.respond, "v2": example_agent_fixed.respond, "v3": example_agent_v3.respond}[variant]
 
     def respond(history: list[dict]) -> str:
         reply = backend.complete(prompt, history, model or model_for("agent"), MAX_TOKENS)
@@ -127,3 +156,7 @@ def respond_v1(history: list[dict]) -> str:
 
 def respond_v2(history: list[dict]) -> str:
     return _respond("v2", history)
+
+
+def respond_v3(history: list[dict]) -> str:
+    return _respond("v3", history)

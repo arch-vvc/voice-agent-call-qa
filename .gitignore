@@ -11,3 +11,7 @@ screenshots/*.png
 !screenshots/*-final.png
 .DS_Store
 .vercel
+
+runs/
+evals/labels/*.jsonl
+config/pilot_access.yaml

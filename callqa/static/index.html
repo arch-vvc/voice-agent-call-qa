@@ -5,126 +5,271 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Call QA: does the agent follow the client's script?</title>
 <style>
+  /* Five tokens. Red pen means "fails" and nothing else. Yellow is the highlighter, used only on mark. */
   :root {
-    --ink: #1b2330; --muted: #5d6878; --line: #dde2ea; --bg: #f4f6f9; --card: #ffffff;
-    --pass: #17803d; --pass-bg: #e6f4ea; --fail: #c62828; --fail-bg: #fdecea; --warn-bg: #fff4d6;
-    --warn-ink: #7a5300; --mid: #9a6200; --mid-bg: #fff4d6; --accent: #2457d6; --mark: #ffe066;
+    --paper: #f7f4ec; --ink: #17150f; --grey: #6b675c; --fail: #d2312a; --mark: #ffe45c;
+    --rule: color-mix(in srgb, var(--grey) 38%, transparent);
+    --display: "Avenir Next Condensed", "DIN Condensed", "Helvetica Neue", Arial, sans-serif;
+    --body: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.45;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  }
-  header {
-    display: flex; align-items: center; justify-content: space-between; gap: 24px;
-    padding: 14px 32px; background: var(--card); border-bottom: 1px solid var(--line);
-  }
-  header h1 { margin: 0 0 2px; font-size: 20px; letter-spacing: -.01em; }
-  header .tagline { color: var(--muted); font-size: 13px; }
-  #mode-badge {
-    padding: 6px 14px; border-radius: 999px; background: #eaf0fd; color: var(--accent);
-    font-size: 13px; font-weight: 600; white-space: nowrap;
-  }
-  #warnings, #error-banner { margin: 0; padding: 10px 32px; font-size: 14px; }
-  #warnings { background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid #f0dfa8; }
-  #warnings p { margin: 2px 0; }
-  #error-banner { background: var(--fail-bg); color: var(--fail); font-weight: 600; border-bottom: 1px solid #f3bcb7; }
   [hidden] { display: none !important; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--body); }
+  h1, h2 { margin: 0; }
+  a, button, select, textarea, summary { font-family: inherit; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
-  main { display: grid; grid-template-columns: 400px 1fr; gap: 24px; max-width: 1440px; margin: 0 auto; padding: 24px 32px; }
+  /* header */
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; padding: 24px 32px 16px; max-width: 1440px; margin: 0 auto; }
+  header h1 { font: 700 32px/1 var(--display); letter-spacing: -.01em; }
+  header .tagline { color: var(--grey); margin-top: 8px; max-width: 56ch; }
+  .head-right { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
+  #mode-badge { color: var(--grey); font-size: 14px; font-variant-numeric: tabular-nums; }
+  #records-link { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+  #records-link:hover { text-decoration-thickness: 3px; }
+  #records-link:active { color: var(--grey); }
+
+  /* banners */
+  #warnings, #error-banner { margin: 0 auto; padding: 8px 32px; max-width: 1440px; font-size: 14px; }
+  #warnings { color: var(--grey); border-top: 1px dotted var(--grey); }
+  #warnings p { margin: 0; }
+  #warnings p::before { content: "Note  "; font-variant: small-caps; font-weight: 700; color: var(--ink); letter-spacing: .06em; }
+  #error-banner { color: var(--fail); font-weight: 700; border-top: 2px solid var(--fail); border-bottom: 2px solid var(--fail); }
+
+  main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 64px; max-width: 1440px; margin: 0 auto; padding: 16px 32px 64px; }
   aside { position: sticky; top: 16px; align-self: start; }
-  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  .panel h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  #results { min-width: 0; }
+
+  .panel { padding: 0; margin: 0 0 32px; }
+  .panel h2 { font: 700 16px/1.5 var(--body); color: var(--ink); margin-bottom: 8px; }
+  label { display: block; font-size: 14px; color: var(--grey); margin-bottom: 4px; }
   #sop-input {
-    width: 100%; height: 340px; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 6px;
-    font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink);
+    width: 100%; height: 336px; resize: vertical; padding: 12px; border: 1px solid var(--ink); border-radius: 2px;
+    background: transparent; font: 13px/1.5 var(--mono); color: var(--ink);
   }
-  #agent-select { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 15px; margin-bottom: 12px; }
+  #sop-input:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+  select { width: 100%; padding: 8px; border: 1px solid var(--ink); border-radius: 2px; background: var(--paper); color: var(--ink); font-size: 16px; }
+  select:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  #agent-select { margin-bottom: 16px; }
+  .pickers { display: flex; gap: 16px; margin-bottom: 16px; }
+  .pickers > div { flex: 1; min-width: 0; }
+  .pickers > div:first-child { flex: 2.2; }
   #run-button {
-    width: 100%; padding: 12px; border: 0; border-radius: 6px; background: var(--accent); color: #fff;
-    font-size: 16px; font-weight: 700; cursor: pointer;
+    width: 100%; padding: 16px; border: 2px solid var(--ink); border-radius: 2px; background: var(--ink); color: var(--paper);
+    font-size: 18px; font-weight: 700; letter-spacing: .02em; cursor: pointer;
   }
-  #run-button:disabled { background: #9db2e6; cursor: wait; }
-  #progress { margin-top: 10px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  #loading { margin-top: 10px; font-size: 14px; color: var(--accent); font-weight: 600; }
-  #loading::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px; border: 2px solid #c8d5f5; border-top-color: var(--accent); border-radius: 50%; vertical-align: -1px; animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  #run-button:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
+  #run-button:active:not(:disabled) { background: var(--ink); color: var(--paper); transform: translateY(1px); }
+  #run-button:disabled { background: transparent; color: var(--grey); border-color: var(--grey); cursor: wait; }
+  #run-button:focus-visible { outline-offset: 4px; }
+  #progress { margin-top: 8px; font-size: 14px; color: var(--grey); font-variant-numeric: tabular-nums; }
+  #loading { margin-top: 8px; font-size: 14px; font-weight: 700; }
+  #loading::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; background: var(--ink); }
+  .keyhint { margin: 16px 0 0; font-size: 14px; color: var(--grey); }
+  kbd { font: 13px var(--mono); border: 1px solid var(--grey); border-radius: 2px; padding: 0 6px; color: var(--ink); }
 
-  .headline { display: flex; align-items: center; gap: 28px; }
-  #headline-panel { padding: 22px 28px; }
-  #pass-rate { font-size: 96px; line-height: .9; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; color: #c3cad6; }
-  #pass-rate.good { color: var(--pass); }
-  #pass-rate.mid { color: var(--mid); }
-  #pass-rate.bad { color: var(--fail); }
-  .headline { min-height: 86px; }
-  .headline-text { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
-  .headline-sub { font-size: 14px; letter-spacing: 0; color: var(--muted); font-weight: 400; margin-top: 2px; }
-  #before-after { margin-left: auto; padding: 12px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 26px; font-weight: 800; letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
-  #before-after .hint { display: block; margin-top: 2px; font-size: 12px; letter-spacing: .02em; color: var(--muted); font-weight: 400; }
-  .empty { color: var(--muted); font-size: 16px; }
-  .steps { margin: 0; padding: 20px 24px; list-style: none; counter-reset: step; background: var(--card); border: 1px dashed #c3cad6; border-radius: 10px; }
-  .steps li { counter-increment: step; display: flex; gap: 14px; align-items: baseline; padding: 8px 0; font-size: 16px; color: var(--ink); }
-  .steps li::before { content: counter(step); flex: 0 0 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 13px; font-weight: 700; }
-  .steps li span { color: var(--muted); }
+  /* the score, circled once in red pen */
+  #headline-panel { margin-bottom: 64px; }
+  .headline { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 40px; min-height: 144px; padding: 16px 0; }
+  .score { position: relative; padding: 32px 64px; }
+  .score:not(:has(.good, .mid, .bad)) { display: none; }  /* no score yet: no stray dash */
+  .pen { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .pen path { fill: none; stroke: var(--rule); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .score:has(#pass-rate.bad) .pen path, .score:has(#pass-rate.mid) .pen path { stroke: var(--fail); }
+  .score:has(#pass-rate.good) .pen path { stroke: var(--ink); }
+  #pass-rate { font: 700 128px/1 var(--display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--ink); }
+  #pass-rate:not(.good):not(.mid):not(.bad) { color: var(--rule); }
+  .headline-text { font: 700 24px/1.25 var(--body); letter-spacing: -.01em; flex: 1 1 180px; min-width: 0; }
+  .headline-sub { font-size: 14px; font-weight: 400; color: var(--grey); margin-top: 8px; }
+  #judge-split-note { margin-top: 8px; font-size: 14px; font-weight: 400; text-decoration: underline dotted; text-underline-offset: 4px; }
+  #before-after { font: 700 48px/1 var(--display); letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #before-after .was { color: var(--grey); text-decoration: line-through; text-decoration-color: var(--fail); text-decoration-thickness: 3px; }
+  #before-after .hint { display: block; margin-top: 8px; font: 14px/1.5 var(--body); letter-spacing: 0; color: var(--grey); white-space: normal; }
+  .empty { color: var(--grey); }
 
-  #next-fix { border-left: 6px solid var(--fail); }
-  #next-fix.mid { border-left-color: var(--mid); }
-  #next-fix.panel.clean { border-left-color: var(--pass); }
-  .fix { padding: 12px 0; border-top: 1px solid var(--line); }
-  .fix:first-of-type { border-top: 0; padding-top: 0; }
-  .fix:last-child { padding-bottom: 0; }
-  .fix-title { font-size: 17px; font-weight: 700; line-height: 1.35; }
-  .fix-count {
-    display: inline-block; min-width: 28px; margin-right: 2px; padding: 1px 8px; border-radius: 999px;
-    background: var(--fail); color: #fff; text-align: center; font-size: 14px;
-  }
-  .fix-hint { margin: 4px 0 8px; color: var(--muted); }
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: step; border-top: 2px solid var(--ink); }
+  .steps li { counter-increment: step; display: flex; gap: 16px; align-items: baseline; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+  .steps li::before { content: counter(step); flex: 0 0 24px; font: 700 32px/1 var(--display); color: var(--grey); }
+  .steps li span { color: var(--grey); }
+
+  /* consistency, cost, next fix */
+  #consistency, #cost-latency { padding-top: 8px; border-top: 1px solid var(--rule); }
+  #consistency .cons-line { font: 700 24px/1.25 var(--display); font-variant-numeric: tabular-nums; }
+  #consistency .cons-line span + span { margin-left: 24px; }
+  #consistency .cons-hint { margin-top: 4px; font-size: 14px; color: var(--grey); }
+  .flaky-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  #cost-latency { display: flex; flex-wrap: wrap; gap: 4px 32px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  #cost-latency .cl-label { font-weight: 700; font-variant: small-caps; letter-spacing: .04em; }
+  #cost-latency .cl-note { color: var(--grey); }
+
+  #next-fix { border-top: 2px solid var(--ink); padding-top: 8px; }
+  .fix { padding: 16px 0; border-top: 1px solid var(--rule); }
+  .fix:first-of-type { border-top: 0; }
+  .fix-title { font-size: 18px; font-weight: 700; line-height: 1.4; }
+  .fix-count { display: inline-block; min-width: 32px; margin-right: 4px; color: var(--fail); font: 700 40px/1 var(--display); vertical-align: -5px; font-variant-numeric: tabular-nums; }
+  .fix-hint { display: none; }  /* the fix title already states the rule */
+  .fix-title { margin-bottom: 16px; }
   .fixcalls { display: flex; flex-wrap: wrap; gap: 8px; }
-  .fixcall {
-    border: 1px solid #f3bcb7; background: var(--fail-bg); color: var(--fail); border-radius: 6px;
-    padding: 4px 10px; font-size: 13px; font-weight: 600; cursor: pointer;
+  .fixcall, .esc-call, .repeat-tab, button.chip.flaky {
+    border: 1px solid var(--ink); background: transparent; color: var(--ink); border-radius: 2px;
+    padding: 4px 12px; font-size: 14px; font-weight: 700; cursor: pointer;
   }
-  .fixcall:hover { background: #fadad7; }
+  .fixcall:hover, .esc-call:hover, .repeat-tab:hover, button.chip.flaky:hover { background: var(--ink); color: var(--paper); }
+  .fixcall:active, .esc-call:active, .repeat-tab:active, button.chip.flaky:active { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+  button.chip.flaky { border-style: dashed; }
 
+  /* trait filter: one compact line above the cards, only built when the report has two or more traits */
+  .trait-bar { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+  .trait-bar label { display: inline; margin: 0; white-space: nowrap; }
+  .trait-bar select { width: auto; max-width: 100%; min-width: 0; padding: 4px 8px; font-size: 14px; }
+  .trait-bar select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  /* escalation: a small 2x2 under the next fix, numbers in ink; only the missed count is red pen */
+  #escalation { margin: 0 0 16px; border-top: 1px solid var(--rule); }
+  .esc-line { list-style: none; cursor: pointer; padding: 8px 0; line-height: 24px; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .esc-line::-webkit-details-marker { display: none; }
+  .esc-line::before { content: "\25B8\00a0"; }
+  .esc-details[open] > .esc-line::before { content: "\25BE\00a0"; }
+  .esc-line:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .esc-grid { display: grid; grid-template-columns: max-content repeat(2, minmax(5rem, 8rem)); justify-content: start; gap: 0; margin: 8px 0; font-variant-numeric: tabular-nums; }
+  .esc-head { font-size: 14px; color: var(--grey); font-variant: small-caps; letter-spacing: .04em; padding-bottom: 4px; }
+  .esc-row { padding: 4px 24px 4px 0; border-top: 1px solid var(--rule); align-self: center; font-size: 14px; color: var(--grey); }
+  .esc-cell { display: flex; align-items: baseline; gap: 8px; padding: 4px 16px 4px 0; border-top: 1px solid var(--rule); }
+  .esc-num { font: 700 28px/1 var(--display); }
+  .esc-cell.fn.hot .esc-num { color: var(--fail); }
+  .esc-label { font-size: 14px; color: var(--grey); }
+  .esc-summary { font-size: 14px; color: var(--grey); margin-bottom: 8px; }
+  .esc-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 8px; }
+  .esc-list-label { font-size: 14px; font-weight: 700; margin-right: 8px; }
+
+  /* compliance: one closed line above the next fix; the rules are ruled rows inside, red pen only on failures */
+  #compliance { margin: 0 0 8px; border-top: 1px solid var(--rule); }
+  .cmp-line { list-style: none; cursor: pointer; padding: 4px 0; line-height: 24px; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cmp-line::-webkit-details-marker { display: none; }
+  .cmp-line::before { content: "\25B8\00a0"; }
+  .cmp-details[open] > .cmp-line::before { content: "\25BE\00a0"; }
+  .cmp-line:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .cmp-line:focus-visible, .cmp-call:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .cmp-disclaimer { margin: 0 0 8px; font-size: 14px; color: var(--grey); max-width: 72ch; }
+  .cmp-rule { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 8px 0; border-top: 1px solid var(--rule); font-size: 14px; }
+  .cmp-name { flex: 1 1 240px; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+  .cmp-tag { font-variant: small-caps; letter-spacing: .04em; color: var(--grey); }
+  .cmp-tag.unverified { color: var(--ink); font-weight: 700; text-decoration: underline dotted; text-underline-offset: 4px; }
+  .cmp-sev, .cmp-status { color: var(--grey); }
+  .cmp-rule.failed .cmp-sev, .cmp-rule.failed .cmp-status { color: var(--fail); font-weight: 700; }
+  .cmp-calls { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 4px; }
+  .cmp-call {
+    border: 1px solid var(--ink); background: transparent; color: var(--ink); border-radius: 2px;
+    padding: 4px 12px; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .cmp-call:hover { background: var(--ink); color: var(--paper); }
+  .cmp-call:active { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+
+  /* the handoff note inside a card */
+  .handoff { padding: 0 0 16px 80px; font-size: 14px; }
+  .handoff-title { font-weight: 700; margin-bottom: 4px; }
+  .handoff-none, .esc-reason { font-size: 14px; color: var(--grey); }
+  .esc-reason { padding: 0 0 16px 80px; }
+  .handoff-field { display: flex; gap: 16px; padding: 2px 0; border-bottom: 1px dotted var(--rule); }
+  .handoff-field .hf-name { flex: 0 0 88px; color: var(--grey); }
+  .handoff-field .hf-value { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .handoff-missing { margin-top: 4px; font-variant: small-caps; letter-spacing: .04em; font-weight: 700; text-decoration: underline dotted; text-underline-offset: 4px; }
+  .handoff-raw { font: 13px/1.5 var(--mono); color: var(--grey); overflow-wrap: anywhere; }
+
+  /* callers are ruled lines on the paper, not cards */
   #calls { display: block; }
-  .call { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; border-left: 6px solid var(--pass); }
-  .call.failed { border-left-color: var(--fail); }
-  .call > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .call { border-bottom: 1px solid var(--rule); }
+  .call > summary { list-style: none; cursor: pointer; padding: 12px 0; line-height: 24px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
   .call > summary::-webkit-details-marker { display: none; }
-  .verdict { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: var(--pass-bg); color: var(--pass); }
-  .call.failed .verdict { background: var(--fail-bg); color: var(--fail); }
+  .call > summary:hover .call-name { text-decoration: underline; text-underline-offset: 4px; }
+  .call > summary:active { color: var(--grey); }
+  .verdict { display: inline-block; flex: 0 0 64px; font-size: 14px; font-weight: 700; text-transform: lowercase; }
+  .verdict::first-letter { text-transform: uppercase; }
+  .verdict::before { content: "\2713\00a0"; }
+  .call.failed .verdict { color: var(--fail); }
+  .call.failed .verdict::before { content: "\2715\00a0"; }
   .call-name { font-weight: 700; }
-  .chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #eef1f6; color: var(--muted); }
-  .chip.lang { background: #efe9fb; color: #5b34a8; }
-  .call-reason { flex-basis: 100%; font-size: 14px; color: var(--fail); }
-  .call-rule { flex-basis: 100%; font-size: 13px; color: var(--muted); }
-  .note { flex-basis: 100%; font-size: 13px; color: #8a93a3; cursor: pointer;  /* judge note: grey, never a failure */
+  .chip { font-size: 14px; color: var(--grey); }
+  .chip.lang { font-variant: small-caps; letter-spacing: .04em; }
+  .chip.critical { color: var(--fail); font-weight: 700; font-variant: small-caps; letter-spacing: .04em; }  /* a critical rule failed: red pen */
+  .chip.misheard { color: var(--fail); font-weight: 700; font-variant: small-caps; letter-spacing: .04em; }  /* a misheard call is a failure: red pen */
+  .call-reason, .call-rule, .note { flex-basis: 100%; padding-left: 80px; }
+  .call:not(.failed) .call-rule, .call:not(.failed) .chip:not(.lang):not(.judge-split):not(.flaky-note):not(.misheard):not(.critical) { display: none; }  /* passing rows: tick, name, language */
+  .call-reason { font-size: 16px; color: var(--ink); }
+  .call-rule { font-size: 14px; line-height: 24px; font-style: italic; color: var(--grey); }
+  .call-rule::before { content: "\2190\00a0"; font-style: normal; }
+  .note { font-size: 14px; color: var(--grey); cursor: pointer;  /* judge note: grey, never a failure */
           display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .note.expanded { display: block; -webkit-line-clamp: unset; }  /* a click shows the whole note */
-  .call.review { border-left-color: #c98a00; }
-  .call.review .verdict { background: #fff1d0; color: #8a5a00; }
-  .call.review .call-reason { color: #8a5a00; }
-  .chip.flaky { background: #fff1d0; color: #8a5a00; font-weight: 700; }  /* the two judge runs disagreed */
-  #flaky-note { margin-top: 4px; font-size: 14px; font-weight: 600; color: #8a5a00; }
-  .transcript { padding: 4px 14px 14px; }
-  .turn { display: flex; gap: 10px; padding: 7px 10px; margin: 3px 0; border-radius: 6px; border: 2px solid transparent; }
-  .turn .who { flex: 0 0 120px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
-  .turn.assistant .who { color: var(--accent); }
-  .turn .text { flex: 1; }
-  .turn.failing { background: var(--fail-bg); border-color: var(--fail); }
+  .chip.judge-split, .chip.flaky-note { color: var(--ink); font-weight: 700; font-variant: small-caps; letter-spacing: .04em; text-decoration: underline dotted; text-underline-offset: 4px; }
+  .repeat-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 8px 80px; }
+  .repeat-tab { font-weight: 400; }
+  .repeat-tab.failed { color: var(--fail); border-color: var(--fail); }
+  .repeat-tab.active { background: var(--ink); border-color: var(--ink); color: var(--paper); font-weight: 700; }
+  .repeat-tab.failed.active { background: var(--fail); border-color: var(--fail); color: var(--paper); }
+
+  /* transcripts */
+  .transcript { padding: 0 0 24px 80px; font: 14px/1.6 var(--mono); }
+  .call[open] > .transcript { animation: unfold .24s ease-out; }
+  @keyframes unfold { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .turn { display: flex; gap: 16px; padding: 8px 0; border-bottom: 1px dotted var(--rule); }
+  .turn .who { flex: 0 0 104px; font: 700 13px/1.7 var(--body); color: var(--grey); }
+  .turn.assistant .who { color: var(--ink); }
+  .turn .text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .turn.failing .who { color: var(--fail); }
-  .turn .text { overflow-wrap: anywhere; }
-  mark { background: var(--mark); color: inherit; padding: 0 3px; border-radius: 3px; font-weight: 700; }
+  .turn.failing .text { text-decoration: underline; text-decoration-color: var(--fail); text-decoration-thickness: 2px; text-underline-offset: 5px; text-decoration-skip-ink: none; }
+  mark { background: var(--mark); color: inherit; padding: 0 2px; font-weight: 700; }
+  .turn .ms { flex: 0 0 auto; align-self: baseline; font-size: 12px; color: var(--grey); font-variant-numeric: tabular-nums; }
+  /* a slow turn gets a dotted ink edge and a "slow" label: never red, never the failing underline */
+  .turn.slow:not(.failing) { border-left: 3px dotted var(--ink); padding-left: 8px; margin-left: -11px; }
+  .turn.slow .ms { color: var(--ink); font-weight: 700; }
+  .turn.slow .ms::before { content: "slow "; font-variant: small-caps; letter-spacing: .04em; }
+
+  @media (max-width: 1100px) { main { grid-template-columns: 300px minmax(0, 1fr); gap: 32px; } #pass-rate { font-size: 112px; } }
+  @media (max-width: 760px) {
+    header { padding: 16px 16px 8px; }
+    #warnings, #error-banner { padding: 8px 16px; }
+    main { grid-template-columns: minmax(0, 1fr); gap: 32px; padding: 8px 16px 48px; }
+    aside { position: static; }
+    #sop-input { height: 168px; }
+    .panel { margin-bottom: 24px; }
+    #headline-panel { margin-bottom: 48px; }
+    .headline { gap: 16px 24px; min-height: 0; }
+    .score { padding: 16px 32px; }
+    #pass-rate { font-size: 88px; }
+    #before-after { font-size: 36px; }
+    .headline-text { flex-basis: 100%; font-size: 20px; }
+    .call > summary { column-gap: 8px; }
+    .verdict { flex-basis: 56px; }
+    .call-reason, .call-rule, .note, .transcript, .repeat-tabs, .handoff, .esc-reason { padding-left: 0; }
+    .transcript { padding-bottom: 16px; }
+    .turn { flex-wrap: wrap; gap: 0 16px; }
+    .turn .who { flex-basis: 100%; }
+    .turn.slow:not(.failing) { margin-left: -11px; }
+    .esc-grid { grid-template-columns: max-content repeat(2, minmax(0, 1fr)); justify-content: stretch; }
+    #consistency .cons-line span { display: block; }
+    #consistency .cons-line span + span { margin-left: 0; }
+  }
+  /* phone: once there is a score, it comes first, then the controls, then the failures */
+  @media (max-width: 760px) {
+    main:has(#pass-rate.good, #pass-rate.mid, #pass-rate.bad) #results { display: contents; }
+    main:has(#pass-rate.good, #pass-rate.mid, #pass-rate.bad) #headline-panel { order: -2; margin-bottom: 0; }
+    main:has(#pass-rate.good, #pass-rate.mid, #pass-rate.bad) aside { order: -1; }
+  }
+  @media (prefers-reduced-motion: reduce) { .call[open] > .transcript { animation: none; } #run-button:active { transform: none; } }
 </style>
 </head>
 <body>
 <header>
   <div>
     <h1>Call QA</h1>
-    <div class="tagline">Paste a client's call script. Simulated callers try to break the agent. See the exact failing turn.</div>
+    <div class="tagline">The client's script is the mark scheme. Simulated callers try to break the agent, and every failing turn is marked in red pen.</div>
   </div>
-  <div id="mode-badge">loading...</div>
+  <div class="head-right">
+    <a id="records-link" href="/records">Run records</a>
+    <div id="mode-badge">loading...</div>
+  </div>
 </header>
 <div id="warnings" hidden></div>
 <div id="error-banner" role="alert" hidden></div>
@@ -132,33 +277,48 @@
 <main>
   <aside>
     <div class="panel">
-      <h2>1. Client SOP (synthetic sample)</h2>
+      <h2>Mark scheme: client SOP (synthetic sample)</h2>
       <textarea id="sop-input" spellcheck="false" aria-label="Client SOP"></textarea>
     </div>
     <div class="panel">
-      <h2>2. Agent under test</h2>
+      <h2>Agent under test</h2>
       <select id="agent-select" aria-label="Agent under test"></select>
+      <div class="pickers">
+        <div><label for="set-select">Callers</label><select id="set-select"></select></div>
+        <div><label for="repeats-select">Repeats</label><select id="repeats-select"></select></div>
+      </div>
       <button id="run-button" type="button">Run</button>
       <div id="progress" hidden></div>
       <div id="loading" hidden>Loading...</div>
+      <p class="keyhint">Press <kbd>n</kbd> to jump to the next failing call.</p>
     </div>
   </aside>
 
   <section id="results">
     <div class="panel" id="headline-panel">
       <div class="headline">
-        <div id="pass-rate">-</div>
+        <div class="score">
+          <div id="pass-rate">-</div>
+          <svg class="pen" viewBox="0 0 300 150" preserveAspectRatio="none" aria-hidden="true"><path d="M 4 75 A 146 71 0 1 0 296 75 A 146 71 0 1 0 4 75 Z"></path></svg>
+        </div>
         <div class="headline-text"><span id="pass-summary">Pick an agent and press Run.</span>
           <div class="headline-sub" id="run-meta"></div>
-          <div id="flaky-note" hidden></div></div>
+          <div id="judge-split-note" hidden></div></div>
         <div id="before-after" hidden></div>
       </div>
     </div>
+    <div class="panel" id="consistency" hidden></div>
+    <div class="panel" id="cost-latency" hidden></div>
+    <div class="panel" id="compliance" hidden></div>
     <div class="panel" id="next-fix" hidden></div>
+    <div class="panel" id="escalation" hidden></div>
+    <div id="trait-bar" class="trait-bar" hidden>
+      <label for="trait-filter">Trait</label><select id="trait-filter"></select>
+    </div>
     <div id="calls">
       <ol class="steps">
-        <li><div><strong>Read the client's script.</strong> <span>The SOP on the left is a synthetic sample: Rs 12,400 overdue, Hinglish callers.</span></div></li>
-        <li><div><strong>Run 20 simulated callers against the v1 prompt.</strong> <span>Wrong numbers, brothers asking the amount, prompt injection.</span></div></li>
+        <li><div><strong>Read the client's script.</strong> <span>It is a synthetic sample: Rs 12,400 overdue, Hinglish callers.</span></div></li>
+        <li><div><strong>Run 20 simulated callers against the v1 prompt.</strong> <span>Wrong numbers, a brother asking the amount, prompt injection.</span></div></li>
         <li><div><strong>Read the failing turns, then run v2.</strong> <span>Same callers, same script, one prompt fix.</span></div></li>
       </ol>
     </div>
@@ -229,7 +389,18 @@
 
   // ---- config ------------------------------------------------------------
 
+  function fillSelect(select, pairs, chosen) {
+    clear(select);
+    pairs.forEach(function (pair) {
+      var option = el('option', '', pair[1]);
+      option.value = pair[0];
+      select.appendChild(option);
+    });
+    select.value = chosen;
+  }
+
   var configWarnings = [];
+  var rulesConfig = { file: null, rules: [] };  // which rules file the server uses, and each rule's title
 
   function applyConfig(config) {
     var backend = config.backend || {};
@@ -249,6 +420,12 @@
       select.appendChild(option);
     });
 
+    fillSelect($('set-select'), [['story', 'Story set (' + config.callers + ' callers)'], ['full', 'Full set (story plus extras)']],
+      config.set || 'story');
+    fillSelect($('repeats-select'), [1, 2, 3, 4, 5].map(function (n) { return [String(n), String(n)]; }),
+      String(config.repeats || 1));
+
+    rulesConfig = { file: config.rules_file || null, rules: config.rules || [] };
     configWarnings = config.warnings || [];
     showWarnings(configWarnings);
   }
@@ -280,7 +457,8 @@
     fetchJson('/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sop: sop, agent: agent })
+      body: JSON.stringify({ sop: sop, agent: agent, set: $('set-select').value || 'story',
+        repeats: parseInt($('repeats-select').value, 10) || 1 })
     }).then(function (result) {
       if (!result.ok) {
         throw new Error(result.body.error || ('Run was rejected (HTTP ' + result.status + ')'));
@@ -340,15 +518,83 @@
     rate.textContent = percent(report.pass_rate);
     var shown = Math.round(report.pass_rate * 100);
     rate.className = shown >= 90 ? 'good' : (shown >= 80 ? 'mid' : 'bad');
-    $('pass-summary').textContent = report.passed + ' of ' + report.total + ' calls follow the SOP';
+    $('pass-summary').textContent = report.repeats > 1
+      ? report.passed + ' of ' + report.total + ' callers passed every repeat'
+      : report.passed + ' of ' + report.total + ' calls follow the SOP';
     $('run-meta').textContent = report.agent.label + ', ' + report.backend.name + ' backend, '
       + report.seconds + ' s';
-    var review = $('flaky-note');  // calls where the two judge runs disagreed: not passes, shown amber
-    var reviewCount = report.needs_review !== undefined ? report.needs_review : (report.flaky || 0);
-    review.hidden = !reviewCount;
-    review.textContent = reviewCount ? reviewCount + ' need review (the two judge runs disagreed)' : '';
+    var judgeSplit = $('judge-split-note');  // calls where the two judge runs disagreed: counted as passes, shown amber
+    judgeSplit.hidden = !report.judge_split;
+    judgeSplit.textContent = report.judge_split
+      ? report.judge_split + ' judge split (the two judge runs disagreed; counted as a pass)' : '';
+    renderConsistency(report);
+    renderCostLatency(report);
+    renderCompliance(report);
     renderNextFix(report);
+    renderEscalation(report);
     renderCalls(report);
+    renderTraitFilter(report);
+  }
+
+  // pass^k (a caller counts only if every repeat passed) next to pass@1 (the share of single runs that passed).
+  function renderConsistency(report) {
+    var box = $('consistency');
+    clear(box);
+    var info = report.consistency;
+    box.hidden = !(info && info.repeats > 1);
+    if (box.hidden) { return; }
+    var k = info.repeats;
+    box.appendChild(el('h2', '', 'Consistency over ' + k + ' repeats'));
+    var line = el('div', 'cons-line');
+    line.appendChild(el('span', '', 'pass^' + k + ' ' + percent(info.pass_hat_k) + ' (' + report.passed + ' of '
+      + report.total + ' callers passed all ' + k + ' repeats)'));
+    line.appendChild(el('span', '', 'pass@1 ' + percent(info.pass_at_1) + ' (' + info.runs_passed + ' of '
+      + info.runs_total + ' runs)'));
+    box.appendChild(line);
+    box.appendChild(el('div', 'cons-hint', 'pass^k counts a caller only if every repeat passed, so it is the number '
+      + 'to trust before go live.'));
+    if ((info.flaky || []).length) {
+      var chips = el('div', 'flaky-chips');
+      info.flaky.forEach(function (item) {
+        var chip = el('button', 'chip flaky', item.persona_id + ' passed ' + item.passed + '/' + item.total
+          + ', failed repeat ' + (item.failed_repeat + 1));
+        chip.type = 'button';
+        chip.addEventListener('click', function () { openCard(item.persona_id, item.failed_repeat); });
+        chips.appendChild(chip);
+      });
+      box.appendChild(chips);
+    }
+  }
+
+  // One strip for cost and latency. Each part carries its label: simulated, estimated or reported.
+  function renderCostLatency(report) {
+    var box = $('cost-latency');
+    clear(box);
+    var cost = report.cost, latency = report.latency;
+    box.hidden = !cost && !latency;
+    if (box.hidden) { return; }
+    if (cost) {
+      var costPart = el('div', 'cl-part');
+      costPart.appendChild(el('span', 'cl-label', 'Cost (' + cost.label + ') '));
+      if (cost.per_call === null || cost.per_call === undefined) {
+        costPart.appendChild(document.createTextNode('cost unknown, no price for '
+          + ((cost.unknown_models || []).join(', ') || 'this model')));
+      } else {
+        costPart.appendChild(document.createTextNode('$' + cost.per_call.toFixed(4) + ' per call, $'
+          + cost.total.toFixed(4) + ' total '));
+        costPart.appendChild(el('span', 'cl-note', 'at prices of ' + ((cost.prices || {}).retrieved_on || 'unknown date')
+          + ', verify prices before quoting'));
+      }
+      box.appendChild(costPart);
+    }
+    if (latency) {
+      var latencyPart = el('div', 'cl-part');
+      latencyPart.appendChild(el('span', 'cl-label', 'Latency (' + latency.label + ') '));
+      latencyPart.appendChild(document.createTextNode('P50 ' + latency.p50_ms + ' ms, P95 ' + latency.p95_ms
+        + ' ms, budget ' + latency.budget_ms + ' ms: ' + latency.over_budget + ' of ' + latency.turns
+        + ' agent turns over'));
+      box.appendChild(latencyPart);
+    }
   }
 
   function renderBeforeAfter(runs, report) {
@@ -359,10 +605,13 @@
     // The finished report is the source of truth: upsert it by run_id in case /api/runs is stale.
     runs = runs.filter(function (run) { return run.run_id !== report.run_id; }).concat([{
       run_id: report.run_id, sop_hash: report.sop_hash, agent_label: report.agent.label,
-      pass_rate: report.pass_rate, passed: report.passed, total: report.total
+      pass_rate: report.pass_rate, passed: report.passed, total: report.total,
+      set: (report.persona_set || {}).name, repeats: report.repeats
     }]);
+    var excluded = false;  // same SOP but another caller set or repeat count: not comparable
     runs.forEach(function (run) {
       if (run.sop_hash !== report.sop_hash) { return; }
+      if (run.set !== (report.persona_set || {}).name || run.repeats !== report.repeats) { excluded = true; return; }
       if (latest[run.agent_label] === undefined) { order.push(run.agent_label); }
       latest[run.agent_label] = run;
     });
@@ -370,19 +619,29 @@
       return label.split(' ')[0] + ' ' + percent(latest[label].pass_rate);
     });
     if (parts.length >= 2) {
-      box.appendChild(document.createTextNode(parts.join(' → ')));
+      parts.forEach(function (part, at) {  // the earlier scores get .was so CSS can strike them through
+        if (at > 0) { box.appendChild(document.createTextNode(' → ')); }
+        box.appendChild(el('span', at < parts.length - 1 ? 'was' : 'now', part));
+      });
       box.appendChild(el('span', 'hint', 'same callers, same SOP'));
     } else {
       box.appendChild(document.createTextNode(parts.join('')));
-      box.appendChild(el('span', 'hint', 'run the other prompt to compare'));
+      box.appendChild(el('span', 'hint', excluded
+        ? 'earlier runs used a different caller set or repeat count, not comparable'
+        : 'run the other prompt to compare'));
     }
     box.hidden = false;
   }
 
-  function openCard(personaId) {
+  // `fromPanel` is for the escalation buttons: the card top stays on screen, so the toggle handler must not
+  // then centre the failing turn. The flag is one shot, and only set when opening will fire a toggle.
+  function openCard(personaId, repeatIndex, fromPanel) {
     var card = document.getElementById('call-' + personaId);
     if (!card) { return; }
+    if (card.hidden) { resetTraitFilter(); }  // a trait filter never keeps a button from reaching its card
+    if (fromPanel && !card.open) { card.setAttribute('data-top', '1'); }
     card.open = true;
+    if (repeatIndex !== undefined && card.selectRepeat) { card.selectRepeat(repeatIndex); }
     card.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
@@ -421,11 +680,166 @@
     });
   }
 
+  // The compliance block: one closed line, then the disclaimer and one ruled row per rule. The block carries titles
+  // only for failing rules, so the others are named from the server config (same rules file) or listed by id.
+  // A title that says UNVERIFIED is labelled so; a known title without it is labelled verified.
+  function ruleTitles(block) {
+    var titles = {};
+    if (rulesConfig.file === block.rules_file) {
+      rulesConfig.rules.forEach(function (rule) { titles[rule.id] = { title: rule.title, severity: rule.severity }; });
+    }
+    (block.failures || []).forEach(function (fail) { titles[fail.rule_id] = { title: fail.title, severity: fail.severity }; });
+    return titles;
+  }
+
+  function ruleRow(id, known, status, failed) {
+    var row = el('div', failed ? 'cmp-rule failed' : 'cmp-rule');
+    var title = known ? known.title : '';
+    row.appendChild(el('span', 'cmp-name', title ? title.replace(/\s*\(UNVERIFIED\)\s*$/, '') : id));
+    if (title) {
+      var unverified = title.indexOf('UNVERIFIED') !== -1;
+      row.appendChild(el('span', unverified ? 'cmp-tag unverified' : 'cmp-tag verified', unverified ? 'UNVERIFIED' : 'verified'));
+    }
+    if (known && known.severity) { row.appendChild(el('span', 'cmp-sev', known.severity)); }
+    row.appendChild(el('span', 'cmp-status', status));
+    return row;
+  }
+
+  function renderCompliance(report) {
+    var panel = $('compliance');
+    clear(panel);
+    var block = report.compliance;
+    panel.hidden = !(block && typeof block === 'object');
+    if (panel.hidden) { return; }
+    var failures = block.failures || [];
+    var pending = block.not_evaluated || [];
+    var critical = 0;
+    failures.forEach(function (fail) { if (fail.severity === 'critical') { critical += fail.count; } });
+    var line = 'Compliance: ' + (critical > 0 ? critical + ' critical' : 'no critical failures');
+    if (pending.length > 0) { line += ', ' + pending.length + (pending.length === 1 ? ' rule' : ' rules') + ' not evaluated offline'; }
+    var more = el('details', 'cmp-details');
+    more.appendChild(el('summary', 'cmp-line', line));
+    panel.appendChild(more);
+    var body = el('div', 'cmp-body');
+    body.appendChild(el('p', 'cmp-disclaimer', block.disclaimer || ''));
+    var titles = ruleTitles(block);
+    var names = {};
+    (report.calls || []).forEach(function (call) { names[call.persona_id] = call.name; });
+    failures.forEach(function (fail) {
+      var row = ruleRow(fail.rule_id, titles[fail.rule_id], fail.count + (fail.count === 1 ? ' caller broke it' : ' callers broke it'), true);
+      var list = el('div', 'cmp-calls');
+      (fail.calls || []).forEach(function (item) {
+        var button = el('button', 'cmp-call', item.name || names[item.persona_id] || item.persona_id);
+        button.type = 'button';
+        button.addEventListener('click', function () { openCard(item.persona_id, undefined, true); });
+        list.appendChild(button);
+      });
+      row.appendChild(list);
+      body.appendChild(row);
+    });
+    var failing = {};
+    failures.forEach(function (fail) { failing[fail.rule_id] = true; });
+    (block.evaluated || []).forEach(function (id) {
+      if (!failing[id]) { body.appendChild(ruleRow(id, titles[id], 'passed', false)); }
+    });
+    pending.forEach(function (item) {
+      body.appendChild(ruleRow(item.rule_id, titles[item.rule_id], 'not evaluated offline: ' + item.why, false));
+    });
+    more.appendChild(body);
+  }
+
+  // The escalation block: who should have been handed to a human (rows) against who was (columns).
+  // Hidden when the report has no block (older records and the story fixtures).
+  function renderEscalation(report) {
+    var panel = $('escalation');
+    clear(panel);
+    var block = report.escalation;
+    panel.hidden = !(block && block.matrix);
+    if (panel.hidden) { return; }
+    var m = block.matrix;
+    // One closed line by default, so the failing card stays high on the page. The matrix is inside.
+    var more = el('details', 'esc-details');
+    var line = 'Escalation: accuracy ' + percent(block.accuracy) + ' (' + (m.tp + m.tn) + ' of ' + block.runs + ' runs), '
+      + m.fn + ' missed';
+    if (m.fp > 0) { line += ', ' + m.fp + ' unnecessary'; }
+    more.appendChild(el('summary', 'esc-line', line));
+    panel.appendChild(more);
+    var grid = el('div', 'esc-grid');
+    grid.appendChild(el('div', 'esc-head', ''));
+    grid.appendChild(el('div', 'esc-head', 'Handed over'));
+    grid.appendChild(el('div', 'esc-head', 'Not handed over'));
+    function cell(key, label) {
+      var box = el('div', 'esc-cell ' + key + (key === 'fn' && m[key] > 0 ? ' hot' : ''));
+      box.appendChild(el('span', 'esc-num', String(m[key])));
+      box.appendChild(el('span', 'esc-label', label));
+      return box;
+    }
+    grid.appendChild(el('div', 'esc-row', 'Should have'));
+    grid.appendChild(cell('tp', 'right call'));
+    grid.appendChild(cell('fn', 'missed'));
+    grid.appendChild(el('div', 'esc-row', 'Should not'));
+    grid.appendChild(cell('fp', 'unnecessary'));
+    grid.appendChild(cell('tn', 'right call'));
+    more.appendChild(grid);
+    if (typeof block.handoff_avg === 'number') {  // the summary line above already says accuracy and runs
+      more.appendChild(el('div', 'esc-summary', 'Handoff note average ' + block.handoff_avg.toFixed(1) + ' of 5'));
+    }
+    var names = {};
+    (report.calls || []).forEach(function (call) { names[call.persona_id] = call.name; });
+    [['missed', 'Missed, should have been handed over'], ['unnecessary', 'Unnecessary, handed over without a rule']]
+      .forEach(function (pair) {
+        var ids = block[pair[0]] || [];
+        if (!ids.length) { return; }
+        var list = el('div', 'esc-list esc-' + pair[0]);
+        list.appendChild(el('span', 'esc-list-label', pair[1]));
+        ids.forEach(function (id) {
+          var button = el('button', 'esc-call', names[id] || id);
+          button.type = 'button';
+          button.addEventListener('click', function () { openCard(id, undefined, true); });
+          list.appendChild(button);
+        });
+        more.appendChild(list);
+      });
+  }
+
+  // The handoff note a call's agent wrote, its score out of 5 and the fields it left out.
+  var HANDOFF_FIELDS = [['caller', 'Caller'], ['issue', 'Issue'], ['tried', 'Tried'], ['why', 'Why'], ['next_step', 'Next step']];
+
+  function buildHandoff(escalation) {
+    var note = escalation && escalation.handoff;
+    if (!note) {
+      if (!(escalation && escalation.escalated)) { return null; }
+      var bare = el('div', 'handoff');
+      bare.appendChild(el('div', 'handoff-none', 'Handed over, no handoff note written (0 of 5)'));
+      return bare;
+    }
+    var box = el('div', 'handoff');
+    var title = el('div', 'handoff-title', 'Handoff note');
+    if (typeof escalation.handoff_score === 'number') {
+      title.appendChild(el('span', 'handoff-score', ', ' + escalation.handoff_score + ' of 5'));
+    }
+    box.appendChild(title);
+    if (typeof note.raw === 'string') {
+      box.appendChild(el('div', 'handoff-raw', note.raw));
+    } else {
+      HANDOFF_FIELDS.forEach(function (field) {
+        if (typeof note[field[0]] !== 'string' || !note[field[0]].trim()) { return; }
+        var row = el('div', 'handoff-field');
+        row.appendChild(el('span', 'hf-name', field[1]));
+        row.appendChild(el('span', 'hf-value', note[field[0]]));
+        box.appendChild(row);
+      });
+    }
+    var missing = escalation.handoff_missing || [];
+    if (missing.length) { box.appendChild(el('div', 'handoff-missing', 'Missing: ' + missing.join(', '))); }
+    return box;
+  }
+
   // The forbidden phrase is whatever follows the last colon of the reason, e.g. "... phrase: 12,400".
-  function forbiddenPhrase(call) {
-    if (call.failure_kind !== 'forbidden') { return ''; }
-    var at = call.reason.lastIndexOf(':');
-    return at === -1 ? '' : call.reason.slice(at + 1).trim().replace(/^['"]|['"]$/g, '');
+  function forbiddenPhrase(kind, reason) {
+    if (kind !== 'forbidden') { return ''; }
+    var at = reason.lastIndexOf(':');
+    return at === -1 ? '' : reason.slice(at + 1).trim().replace(/^['"]|['"]$/g, '');
   }
 
   function fillWithMark(node, text, phrase) {
@@ -439,16 +853,44 @@
     node.appendChild(document.createTextNode(text.slice(at + phrase.length)));
   }
 
+  // The slowest allowed agent turn comes from the report's latency block; a turn over it is marked .slow.
+  var latencyBudget = null;
+
+  function fillTranscript(box, transcript, failingTurn, phrase, latencies) {
+    clear(box);
+    var agentTurn = 0;
+    transcript.forEach(function (turn, index) {
+      var failing = failingTurn !== null && failingTurn !== undefined && index === failingTurn;
+      var ms = turn.role === 'assistant' && latencies.length > agentTurn ? latencies[agentTurn] : null;
+      if (turn.role === 'assistant') { agentTurn += 1; }
+      var slow = ms !== null && latencyBudget !== null && ms > latencyBudget;
+      var row = el('div', 'turn ' + turn.role + (failing ? ' failing' : '') + (slow ? ' slow' : ''));
+      var speaker = turn.role === 'assistant' ? 'Agent' : 'Caller';
+      row.appendChild(el('div', 'who', 'Turn ' + (index + 1) + ' ' + speaker));
+      var text = el('div', 'text');
+      fillWithMark(text, turn.content, failing ? phrase : '');
+      row.appendChild(text);
+      if (ms !== null) { row.appendChild(el('div', 'ms', ms + ' ms')); }
+      box.appendChild(row);
+    });
+  }
+
   function buildCard(call) {
-    var inReview = call.needs_review !== undefined ? call.needs_review : !!call.flaky;
-    var card = el('details', call.passed ? 'call' : (inReview ? 'call review' : 'call failed'));
+    var card = el('details', call.passed ? 'call' : 'call failed');
     card.id = 'call-' + call.persona_id;
+    card.setAttribute('data-traits', (call.traits || []).join(' '));
 
     var summary = el('summary');
-    summary.appendChild(el('span', 'verdict', call.passed ? 'PASS' : (inReview ? 'REVIEW' : 'FAIL')));
+    summary.appendChild(el('span', 'verdict', call.passed ? 'PASS' : 'FAIL'));
     summary.appendChild(el('span', 'call-name', call.name));
     summary.appendChild(el('span', 'chip lang', call.language === 'hinglish' ? 'Hinglish' : 'English'));
-    if (inReview) { summary.appendChild(el('span', 'chip flaky', 'needs review')); }
+    if (call.severity === 'critical') { summary.appendChild(el('span', 'chip critical', 'critical')); }
+    if (call.failure_kind === 'misheard') { summary.appendChild(el('span', 'chip misheard', 'misheard')); }
+    if (call.judge_split) { summary.appendChild(el('span', 'chip judge-split', 'judge split')); }
+    if (call.repeats_total > 1) {
+      summary.appendChild(el('span', call.flaky ? 'chip flaky-note' : 'chip',
+        (call.flaky ? 'flaky ' : '') + call.repeats_passed + '/' + call.repeats_total + ' repeats passed'));
+    }
     (call.tags || []).forEach(function (tag) { summary.appendChild(el('span', 'chip', tag)); });
     if (!call.passed) {
       var turnText = call.failing_turn === null ? '' : ' (Turn ' + (call.failing_turn + 1) + ')';
@@ -466,23 +908,66 @@
     }
     summary.appendChild(el('div', 'call-rule', 'SOP: ' + call.sop_rule));
     card.appendChild(summary);
+    var handoff = buildHandoff(call.escalation);
+    if (handoff) { card.appendChild(handoff); }
+    if (call.escalation && call.escalation.outcome === 'FN') {
+      var should = el('div', 'esc-reason', 'Should have been handed over.');
+      card.appendChild(should);
+    }
 
-    var phrase = forbiddenPhrase(call);
     var transcript = el('div', 'transcript');
-    call.transcript.forEach(function (turn, index) {
-      var failing = !call.passed && !inReview && index === call.failing_turn;
-      var row = el('div', 'turn ' + turn.role + (failing ? ' failing' : ''));
-      var speaker = turn.role === 'assistant' ? 'Agent' : 'Caller';
-      row.appendChild(el('div', 'who', 'Turn ' + (index + 1) + ' ' + speaker));
-      var text = el('div', 'text');
-      fillWithMark(text, turn.content, failing ? phrase : '');
-      row.appendChild(text);
-      transcript.appendChild(row);
-    });
+    var repeats = call.repeat_results || [];
+    // The call stands for its first failing repeat, else repeat 0, and that is the repeat its latencies belong to.
+    var shown = 0;
+    for (var i = 0; i < repeats.length; i += 1) {
+      if (!repeats[i].passed) { shown = i; break; }
+    }
+    if (repeats.length > 1) {
+      var tabs = el('div', 'repeat-tabs');
+      var buttons = repeats.map(function (repeat, index) {
+        var tab = el('button', repeat.passed ? 'repeat-tab' : 'repeat-tab failed',
+          'Repeat ' + (index + 1) + (repeat.passed ? '' : ' (failed)'));
+        tab.type = 'button';
+        tab.addEventListener('click', function () { selectRepeat(index); });
+        tabs.appendChild(tab);
+        return tab;
+      });
+      card.appendChild(tabs);
+      card.selectRepeat = selectRepeat;
+    }
     card.appendChild(transcript);
+
+    function selectRepeat(index) {
+      shown = index;
+      var repeat = repeats[index];
+      (buttons || []).forEach(function (tab, at) {
+        if (at === index) { tab.classList.add('active'); } else if (tab.classList.contains('active')) { tab.classList.toggle('active'); }
+      });
+      var latencies = index === representative() ? (call.turn_latency_ms || []) : [];
+      fillTranscript(transcript, repeat.transcript, repeat.passed ? null : repeat.failing_turn,
+        forbiddenPhrase(repeat.failure_kind, repeat.reason || ''), latencies);
+    }
+
+    function representative() {
+      for (var at = 0; at < repeats.length; at += 1) {
+        if (!repeats[at].passed) { return at; }
+      }
+      return 0;
+    }
+
+    if (repeats.length > 1) {
+      selectRepeat(shown);
+    } else {
+      fillTranscript(transcript, call.transcript, call.passed ? null : call.failing_turn,
+        forbiddenPhrase(call.failure_kind, call.reason), call.turn_latency_ms || []);
+    }
 
     card.addEventListener('toggle', function () {
       if (!card.open) { return; }
+      if (card.hasAttribute('data-top')) {
+        card.removeAttribute('data-top');
+        return;
+      }
       if (card.hasAttribute('data-auto')) {
         card.removeAttribute('data-auto');
         return;
@@ -496,6 +981,7 @@
   function renderCalls(report) {
     var box = $('calls');
     clear(box);
+    latencyBudget = report.latency && typeof report.latency.budget_ms === 'number' ? report.latency.budget_ms : null;
     // Failed calls follow the next_fixes order (biggest group first), then passed calls.
     var rank = {};
     var position = 0;
@@ -507,22 +993,87 @@
       return rank[call.persona_id] === undefined ? 1e9 : rank[call.persona_id];
     }
     var calls = report.calls.map(function (call, index) { return { call: call, index: index }; })
-      .sort(function (a, b) { return (sortKey(a.call) - sortKey(b.call)) || (a.index - b.index); })
+      .sort(function (a, b) {
+        return ((b.call.severity === 'critical') - (a.call.severity === 'critical'))  // critical calls lead
+          || (sortKey(a.call) - sortKey(b.call)) || (a.index - b.index);
+      })
       .map(function (entry) { return entry.call; });
     calls.forEach(function (call) { box.appendChild(buildCard(call)); });
     // Open the first failed call so the failing turn is on screen straight after the headline.
-    var firstFix = (report.next_fixes || [])[0];
-    var firstFailed = (firstFix && firstFix.calls.length && document.getElementById('call-' + firstFix.calls[0].persona_id))
-      || box.querySelector('.call.failed');
+    var firstFailed = box.querySelector('.call.failed');  // the first failing card in the order shown
     if (firstFailed) {
       firstFailed.setAttribute('data-auto', '1');  // opened by us, so do not scroll the headline away
       firstFailed.open = true;
     }
   }
 
+  // ---- trait filter ------------------------------------------------------
+  // Labels mirror TRAITS in callqa/persona_sets.py (a test checks they agree); an unknown id is shown as it came.
+  var TRAIT_LABELS = {
+    hindi_numbers: 'Hindi number words',
+    en_to_hi_switch: 'English to Hindi switch',
+    tamil_english: 'Tamil English',
+    kannada_english: 'Kannada English',
+    clipped_regional_english: 'Clipped regional English',
+    indian_dates: 'Indian style dates'
+  };
+
+  // One trait is no choice (and the story set has exactly one), so the bar stays hidden and adds no height.
+  function renderTraitFilter(report) {
+    var bar = $('trait-bar');
+    var select = $('trait-filter');
+    var block = report.traits;
+    var ids = block && typeof block === 'object' ? Object.keys(block) : [];
+    clear(select);
+    bar.hidden = ids.length < 2;
+    if (bar.hidden) { return; }
+    var all = el('option', '', 'All traits');
+    all.value = '';
+    select.appendChild(all);
+    ids.forEach(function (id) {
+      var stats = block[id];
+      var option = el('option', '', (Object.prototype.hasOwnProperty.call(TRAIT_LABELS, id) ? TRAIT_LABELS[id] : id) + ': ' + percent(stats.pass_rate)
+        + ' (' + stats.passed + ' of ' + stats.total + ')');
+      option.value = id;
+      select.appendChild(option);
+    });
+    select.value = '';
+  }
+
+  // An empty choice shows every card, so nothing is hidden until the user picks a trait.
+  function applyTraitFilter() {
+    var chosen = $('trait-filter').value;
+    $('calls').querySelectorAll('details.call').forEach(function (card) {
+      var traits = (card.getAttribute('data-traits') || '').split(' ');
+      card.hidden = chosen !== '' && traits.indexOf(chosen) === -1;
+    });
+  }
+
+  function resetTraitFilter() {
+    $('trait-filter').value = '';
+    applyTraitFilter();
+  }
+
   // ---- start up ----------------------------------------------------------
 
   $('run-button').addEventListener('click', startRun);
+  $('trait-filter').addEventListener('change', applyTraitFilter);
+
+  // Press n (outside a form field) to open the next failing card.
+  var nextFail = -1;
+  if (document.addEventListener) {
+    document.addEventListener('keydown', function (event) {
+      var tag = (event.target && event.target.tagName || '').toLowerCase();
+      if (event.key !== 'n' || event.ctrlKey || event.metaKey || event.altKey) { return; }
+      var traitSelect = tag === 'select' && event.target.id === 'trait-filter';  // focus stays here after choosing
+      if (tag === 'textarea' || tag === 'input' || (tag === 'select' && !traitSelect)) { return; }
+      var failed = Array.prototype.filter.call($('calls').querySelectorAll('.call.failed'),
+        function (card) { return !card.hidden; });
+      if (!failed.length) { return; }
+      nextFail = (nextFail + 1) % failed.length;
+      openCard(failed[nextFail].id.replace(/^call-/, ''));
+    });
+  }
   loadConfig();
 })();
 </script>

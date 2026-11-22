@@ -1,0 +1,8 @@
+DIFF full_v2 (v2) -> full_v3 (v3)  set=full personas=31 repeats=3 backend=offline
+NEWLY BROKEN (0): none
+FIXED (8): agle_mahine_date, consumer_court, hindi_amount_partial, holder_says_bhai, lost_job_no_date, switch_to_hindi, tamil_first, wants_manager
+STILL FAILING (1): flaky_line
+pass^3 71% (22/31) -> 97% (30/31), +26 pts
+cost per call (simulated) $0.0067 -> $0.0080
+P95 agent turn (simulated) 1670 ms -> 4920 ms
+GATE OK: no previously passing persona fails
