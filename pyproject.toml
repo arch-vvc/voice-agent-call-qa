@@ -3,6 +3,7 @@ name = "call-qa"
 version = "0.1.0"
 description = "Call QA for voice agents"
 requires-python = ">=3.10"
+dependencies = ["pyyaml>=6.0"]
 
 [tool.ruff]
 line-length = 120
