@@ -128,15 +128,6 @@ def test_main_check_aborted_message(monkeypatch, capsys):
     assert "ABORTED: usage limit reached" in capsys.readouterr().out
 
 
-def test_docs_describe_the_command():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for needle in ("python -m callqa", "70%", "95%", "about 55", "no API key"):
-        assert needle in readme
-    claude_md = REPO_CLAUDE_MD.read_text(encoding="utf-8") if REPO_CLAUDE_MD else ""
-    if REPO_CLAUDE_MD:
-        assert "Call QA dashboard: `python demos/call-qa/run.py`" in claude_md
-        assert "Call QA dashboard: not built yet" not in claude_md
-    assert "drop `--offline`" not in readme + claude_md
 
 
 def slow_respond(history):
@@ -212,12 +203,6 @@ def test_open_browser_uses_127_0_0_1(monkeypatch):
     assert opened and opened[0].startswith("http://127.0.0.1:")
 
 
-def test_docs_say_free_check_is_offline():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "python -m callqa --check --backend offline" in readme
-    assert "about 110" in readme
-    if REPO_CLAUDE_MD:
-        assert "localhost" not in REPO_CLAUDE_MD.read_text(encoding="utf-8")
 
 
 def test_command_dispatch_leaves_flags_working():

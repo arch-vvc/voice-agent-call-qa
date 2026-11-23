@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 import pytest
-from tests.test_v3_agent import LEAKS, converse
 
 from callqa import evaluate
 from callqa.escalation import score_handoff, split_handoff
@@ -16,6 +15,7 @@ from callqa.sop import parse_sop
 from evals import example_agent, example_agent_fixed, example_agent_v3, llm_agent
 from evals.backends import OfflineBackend
 from evals.run_evals import run_suite
+from tests.test_v3_agent import LEAKS, converse
 
 ROOT = Path(__file__).resolve().parent.parent
 SOP_TEXT = (ROOT / "samples" / "sop_collections_acme.md").read_text(encoding="utf-8")

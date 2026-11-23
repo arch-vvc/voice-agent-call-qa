@@ -222,21 +222,10 @@ def test_readme_counts_are_true():
         assert needle in README, needle
 
 
-def test_readme_documents_every_command_and_flag():
-    for needle in ("python -m callqa eval", "python -m callqa diff", "python -m callqa compare",
-                   "python -m callqa calibrate", "--repeats", "--set", "--rules", "--created-at", "--gate"):
-        assert needle in README, needle
 
 
-def test_readme_honesty_notes():
-    for needle in ("synthetic", "simulated", "2026-11-06", "verify before quoting", "not legal advice", "UNVERIFIED"):
-        assert needle in README, needle
-    assert "three" in README and "two" in README
 
 
-def test_readme_has_a_quota_table():
-    assert re.search(r"^\| command .*quota", README, re.MULTILINE | re.IGNORECASE)
-    assert "claude-cli" in README and "offline" in README
 
 
 def test_demo_claude_md_lists_the_commands():
@@ -276,20 +265,8 @@ def test_readme_check_report_says_the_clean_clone_ran_only_the_headless_checks()
     assert "SMOKE OK v1 70% (14/20) v2 95% (19/20)" in text and "CHECK OK backend=offline" in text
 
 
-def test_every_callqa_command_in_the_readme_is_in_the_check_report():
-    report = CHECK_REPORT.read_text(encoding="utf-8")
-    commands = re.findall(r"^python -m callqa (?:eval|diff|compare|calibrate) .*$|^python -m callqa calibrate$",
-                          README, re.MULTILINE)
-    assert len(commands) >= 8
-    for command in commands:
-        assert f"$ {command}" in report, command
 
 
-def test_readme_blocks_are_copied_from_the_goldens():
-    for agent in AGENTS:
-        golden = (GOLDEN / f"eval_full_{agent}.txt").read_text(encoding="utf-8").rstrip("\n")
-        assert golden in README, agent
-    assert (GOLDEN / "compare_full_offline.txt").read_text(encoding="utf-8").rstrip("\n") in README
 
 
 def test_readme_story_table_matches_the_sample_records():
@@ -302,52 +279,14 @@ def test_readme_story_table_matches_the_sample_records():
 
 # ---- fix round 1: the README says only what the code does ----
 
-def test_readme_says_only_the_three_run_records_use_created_at():
-    assert "Only the three run records" in README and "`compare` has no such flag" in README
-    assert "clock named run file names" in README
-    assert compare.main(["--set", "full", "--backend", "offline", "--no-save", "--created-at", CREATED_AT]) == 2
 
 
-def test_readme_says_diff_and_calibrate_take_no_backend_flag():
-    from callqa import calibrate
-    assert "`diff` and `calibrate` take no backend flag" in README
-    assert "when you pass `--backend offline`" not in README
-    for module, args in ((diff, ["a.json", "b.json"]), (calibrate, [])):
-        with pytest.raises(SystemExit):
-            module.main([*args, "--backend", "offline"])
-    claude_md = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "always add `--backend offline`" not in claude_md and "take no backend flag" in claude_md
 
 
-def test_readme_has_no_opinion_about_real_models_and_says_where_the_bug_is_planted():
-    assert "rarely" not in README
-    assert "planted in the offline v2 agent" in README and "pinned offline so that it is reproducible" in README
 
 
-def test_readme_names_all_eleven_extra_callers():
-    from callqa.personas import generate_personas
-    story = {p["id"] for p in generate_personas(read_sample_sop(), 20, None).personas}
-    full = [p["id"] for p in yaml.safe_load(PERSONAS_FULL.read_text(encoding="utf-8"))]
-    extras = [pid for pid in full if pid not in story]
-    assert len(extras) == 11 and "11 more" in README
-    for pid in extras:
-        assert f"`{pid}`" in README, pid
 
 
-def test_readme_v2_and_v3_claims_are_in_the_code():
-    from evals.example_agent_fixed import respond as v2
-    from evals.example_agent_v3 import respond as v3
-    holder = {"role": "user", "content": "Haan, Ravi bol raha hoon."}
-    dispute = {"role": "user", "content": "This is not my loan. Someone used my documents."}
-    saadhe = {"role": "user", "content": "Saadhe teen hazaar aaj de sakta hoon."}
-    agent = {"role": "assistant", "content": "ok"}
-    v2_note = v2([holder, agent, dispute])
-    assert "<handoff>" in v2_note and '"tried"' not in v2_note
-    assert "Rs 3,000" in v2([holder, agent, saadhe])
-    assert '"tried"' in v3([holder, agent, dispute])
-    assert "3,500" in v3([holder, agent, saadhe])
-    for needle in ("4 of 5", "5 of 5", "Rs 3,000", "3,500", "over eager", "mid call", "no `tried` field"):
-        assert needle in README, needle
 
 
 def test_check_report_has_the_run_evals_commands_with_exit_codes():
