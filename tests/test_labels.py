@@ -329,7 +329,8 @@ def test_a_torn_last_line_cannot_merge_with_the_next_one(tmp_path):
     assert lines == ['{"torn": ', '{"ok": 1}']
 
 
+@pytest.mark.skipif(not (DEMO / ".git").exists(), reason="needs a git checkout")
 def test_labels_folder_jsonl_is_git_ignored():
-    result = subprocess.run(["git", "check-ignore", "-q", "demos/call-qa/evals/labels/human_labels.jsonl"],
-                            cwd=DEMO.parents[1], capture_output=True)
+    result = subprocess.run(["git", "check-ignore", "-q", "evals/labels/human_labels.jsonl"],
+                            cwd=DEMO, capture_output=True)
     assert result.returncode == 0
